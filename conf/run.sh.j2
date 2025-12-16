@@ -46,6 +46,10 @@ echo "Job ID: {{ job_id }}" >> {{ paths.env }}/project_info.txt
 # Execute pipeline with resolved config
 python {{ paths.code }}/main.py --resolved {{ paths.work }}/resolved.yaml
 
+# Git traceability
+GIT_COMMIT=$(git -C "$HOME/projects/{{ project }}" rev-parse HEAD 2>/dev/null || echo "unknown")
+echo "Git commit: $GIT_COMMIT" | tee -a {{ paths.env }}/project_info.txt
+
 # Post-run: 
 # Sync key artifacts to STORE
 rsync -a --include="*/" --include="*.pt" --include="*.ckpt" --include="*.png" \
