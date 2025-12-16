@@ -1,0 +1,19 @@
+title: "CP-HOSfing - Conformal Prediction"
+description: "Code for conformal prediction approaches: baseline A (per-level), baseline B (leaf-level only) and S-CP"
+
+# Debugging
+slurm:
+  time: "01:00:00"
+  cpus: 16
+  mem_per_cpu: "1GB"
+  gpus: 0
+
+# Final experiment
+# slurm:
+#   time: "1-00:00:00"
+#   cpus: 32
+#   mem_per_cpu: "2GB"
+#   gpus: 0
+
+notify:
+  email: ruben.perez.jove@udc.es
