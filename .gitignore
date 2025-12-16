@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+
+# Jupyter
+.ipynb_checkpoints/
+
+# HPC-specific links (these are cluster paths, not portable)
+links/
+
+# Editors / IDE
+*.swp
+*.swo
+.vscode/
+.idea/

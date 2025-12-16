@@ -1,0 +1,63 @@
+#!/bin/bash
+#----------------------------------------------------
+# {{ title }}
+# {{ description }}{% if transformer_type is defined %} - {{ transformer_type }}{% endif %}
+{% if comment %}# Comment: {{ comment }}{% endif %}
+# Path: {{ full_path }}
+#----------------------------------------------------
+#SBATCH -J {{ job_id }}
+#SBATCH -t {{ slurm.time }}
+#SBATCH -c {{ slurm.cpus }}
+#SBATCH --mem-per-cpu={{ slurm.mem_per_cpu }}
+#SBATCH --chdir={{ paths.out }}
+#SBATCH --output={{ paths.out }}/slurm_std.out
+#SBATCH --error={{ paths.out }}/slurm_std.err
+#SBATCH --open-mode=append
+{% if slurm.gpus|int > 0 -%}
+#SBATCH --gres=gpu:a100:{{ slurm.gpus }}
+{%- endif %}
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user={{ notify.email }}
+
+set -euo pipefail
+
+module load cesga/2022 python/3.10.8 2>/dev/null || true
+export PYTHONNOUSERSITE=1
+export PYTHONPATH="$PYTHONPATH:$HOME/projects/{{ project }}"
+
+# Activate project venv (in STORE)
+source {{ paths.venv }}/bin/activate
+
+# Environment traceability
+mkdir -p {{ paths.env }}
+module list > {{ paths.env }}/modules.txt 2>&1
+python -V > {{ paths.env }}/python_version.txt
+pip freeze > {{ paths.env }}/pip_freeze.txt
+env | grep SLURM_ > {{ paths.env }}/slurm_env.txt
+
+# Project/Experiment info
+echo "Full Path: {{ full_path }}" > {{ paths.env }}/project_info.txt
+echo "Project: {{ project }}" >> {{ paths.env }}/project_info.txt
+{% if exp_path -%}
+echo "Experiment: {{ exp_path }}" >> {{ paths.env }}/project_info.txt
+{%- endif %}
+echo "Job ID: {{ job_id }}" >> {{ paths.env }}/project_info.txt
+
+# Execute pipeline with resolved config
+python {{ paths.code }}/main.py --resolved {{ paths.work }}/resolved.yaml
+
+# Post-run: 
+# Sync key artifacts to STORE
+rsync -a --include="*/" --include="*.pt" --include="*.ckpt" --include="*.png" \
+      --include="*.csv" --include="*.json" --include="*.txt" \
+      --include="*.yaml" --include="*.yml" \
+      --include="*.joblib" \
+      --exclude="*" \
+      {{ paths.out }}/ {{ paths.store_artifacts }}/
+
+# Copy latest artifacts to HOME artifacts directory (update files, do not delete anything in destination)
+DEST_HOME_ARTIFACTS_DIR="$HOME/projects/{{ project }}/exps/{{ exp_path }}/artifacts"
+mkdir -p "${DEST_HOME_ARTIFACTS_DIR}"
+rsync -a "{{ paths.store_artifacts }}/" "${DEST_HOME_ARTIFACTS_DIR}/"
+
+# Done.

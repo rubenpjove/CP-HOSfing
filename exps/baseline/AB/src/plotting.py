@@ -1,0 +1,221 @@
+import os
+import math
+import pandas as pd
+import numpy as np
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from typing import Dict, List
+
+
+METRIC_KEYS = [
+    "coverage",
+    "set_size_mean",
+    "set_size_median",
+    "empty_rate",
+    "singleton_rate",
+    "top1_acc_non_empty",
+    "base_top1_acc",
+    "hir",
+]
+LEVELS = ["family", "major", "leaf"]
+
+
+def _ensure_dir(path: str):
+    os.makedirs(path, exist_ok=True)
+
+
+def plot_alpha_boxplots(alpha_dir: str):
+    """Create boxplots across runs for each metric and level in a given alpha dir.
+
+    Expects files: alpha_dir/runs_metrics_{level}.csv
+    Saves to: alpha_dir/plots/{metric}_{level}_boxplot.{png,svg}
+    """
+    plots_dir = os.path.join(alpha_dir, "plots")
+    _ensure_dir(plots_dir)
+
+    for level in LEVELS:
+        csv_path = os.path.join(alpha_dir, f"runs_metrics_{level}.csv")
+        if not os.path.exists(csv_path):
+            continue
+        try:
+            df = pd.read_csv(csv_path)
+        except Exception:
+            continue
+        # For each metric, plot a boxplot across runs
+        for metric in METRIC_KEYS:
+            if metric not in df.columns:
+                continue
+            fig, ax = plt.subplots(figsize=(6, 4))
+            # Boxplot of per-run values
+            ax.boxplot([df[metric].dropna().values], labels=[level])
+            ax.set_title(f"{metric} — {level}")
+            ax.set_ylabel(metric)
+            ax.grid(True, linestyle=":", alpha=0.6)
+            png_path = os.path.join(plots_dir, f"{metric}_{level}_boxplot.png")
+            svg_path = os.path.join(plots_dir, f"{metric}_{level}_boxplot.svg")
+            plt.tight_layout()
+            plt.savefig(png_path, dpi=150)
+            plt.savefig(svg_path)
+            plt.close(fig)
+
+
+def plot_aggregate_lines(out_dir: str, cross_alpha_csv: str):
+    """Create line plots of mean±std vs alpha for each metric, with one line per level.
+
+    Expects: out_dir/metrics_across_alphas.csv with columns: alpha, level, metric, mean, std
+    Saves to: out_dir/plots/{metric}_mean_std_by_level.{png,svg}
+    """
+    try:
+        df = pd.read_csv(cross_alpha_csv)
+    except Exception:
+        return
+    plots_dir = os.path.join(out_dir, "plots")
+    _ensure_dir(plots_dir)
+
+    # Ensure sorted alphas for consistent lines
+    if "alpha" in df.columns:
+        # We'll iterate per metric
+        for metric in METRIC_KEYS:
+            sub = df[df["metric"] == metric].copy()
+            if sub.empty:
+                continue
+            # Pivot to have rows=alpha, columns=level, values=mean/std handled separately
+            alphas_sorted = sorted(sub["alpha"].unique())
+            fig, ax = plt.subplots(figsize=(7, 4.5))
+            for level in LEVELS:
+                lvl = sub[sub["level"] == level]
+                if lvl.empty:
+                    continue
+                # Align by alpha ordering
+                lvl_sorted = lvl.set_index("alpha").reindex(alphas_sorted).reset_index()
+                x = lvl_sorted["alpha"].values
+                y = lvl_sorted["mean"].values
+                s = lvl_sorted["std"].values if "std" in lvl_sorted.columns else None
+                ax.plot(x, y, marker="o", label=level)
+                if s is not None and not pd.isna(s).all():
+                    y1 = y - s
+                    y2 = y + s
+                    ax.fill_between(x, y1, y2, alpha=0.15)
+            ax.set_title(f"{metric} vs alpha (mean±std)")
+            ax.set_xlabel("alpha")
+            ax.set_ylabel(metric)
+            ax.grid(True, linestyle=":", alpha=0.6)
+            ax.legend(title="level")
+            png_path = os.path.join(plots_dir, f"{metric}_mean_std_by_level.png")
+            svg_path = os.path.join(plots_dir, f"{metric}_mean_std_by_level.svg")
+            plt.tight_layout()
+            plt.savefig(png_path, dpi=150)
+            plt.savefig(svg_path)
+            plt.close(fig)
+
+
+def plot_ab_comparison(ab_dir: str, combined_csv: str):
+    """Generate AB comparison plots: per metric, overlay 3 levels (colors) and 2 baselines (linestyles).
+    
+    Expects: combined_csv with columns: baseline, alpha, level, metric, mean, std
+    Saves to: ab_dir/plots/AB_{metric}_mean_std_across_levels.{png,svg}
+    
+    Args:
+        ab_dir: Directory for AB aggregated results (plots subdirectory will be created)
+        combined_csv: Path to metrics_across_alphas_by_baseline.csv
+    """
+    try:
+        df_combined = pd.read_csv(combined_csv)
+    except Exception as e:
+        return
+    
+    plots_dir = os.path.join(ab_dir, "plots")
+    _ensure_dir(plots_dir)
+    
+    # Ensure numeric alpha for sorting
+    df_combined["alpha"] = df_combined["alpha"].astype(float)
+    baselines_present = sorted(df_combined["baseline"].dropna().unique().tolist())
+    # Baseline colors; line styles encode levels
+    baseline_color_map = {"A": "#1f77b4", "B": "#2ca02c", "SCP": "#d62728"}
+    level_linestyle_map = {"family": "-", "major": "--", "leaf": ":"}
+    
+    def format_baseline_label(baseline: str) -> str:
+        """Format baseline name for display."""
+        if baseline == "SCP":
+            return "S-CP"
+        return f"Baseline {baseline}"
+    
+    for metric in METRIC_KEYS:
+        plt.figure(figsize=(9, 5))
+        plotted_any = False
+
+        # Special handling for HIR: one line per baseline (no per-level breakdown)
+        if metric == "hir":
+            for bl in baselines_present:
+                df_m = df_combined[(df_combined["metric"] == metric) & (df_combined["baseline"] == bl)].copy()
+                if df_m.empty:
+                    continue
+                df_m = df_m.sort_values("alpha")
+                # If multiple levels exist, aggregate across levels for this baseline/alpha
+                df_m = (
+                    df_m.groupby("alpha", as_index=False)
+                    .agg({"mean": "mean", "std": "mean"})
+                    .sort_values("alpha")
+                )
+                alphas = df_m["alpha"].values
+                means = df_m["mean"].values
+                stds = df_m["std"].values
+                color = baseline_color_map.get(bl, "#1f77b4")
+                label = format_baseline_label(bl)
+                plt.plot(alphas, means, linestyle="-", color=color, label=label)
+                lower = np.where(np.isfinite(stds), means - stds, np.nan)
+                upper = np.where(np.isfinite(stds), means + stds, np.nan)
+                plt.fill_between(alphas, lower, upper, alpha=0.15, color=color)
+                plotted_any = True
+            if not plotted_any:
+                plt.close()
+                continue
+            plt.xlabel("alpha")
+            plt.ylabel(metric)
+            plt.title(f"{metric} across alphas (mean±std) — baselines")
+            plt.legend(ncol=1)
+            plt.grid(True, linestyle=":", linewidth=0.5)
+            base_name = f"AB_{metric}_mean_std_across_levels"
+            plt.tight_layout()
+            plt.savefig(os.path.join(plots_dir, base_name + ".svg"))
+            plt.savefig(os.path.join(plots_dir, base_name + ".png"), dpi=150)
+            plt.close()
+            continue
+
+        # Default: per-level lines with per-baseline styles
+        for bl in baselines_present:
+            color = baseline_color_map.get(bl, "#1f77b4")
+            for level in LEVELS:
+                df_m = df_combined[
+                    (df_combined["level"] == level)
+                    & (df_combined["metric"] == metric)
+                    & (df_combined["baseline"] == bl)
+                ].copy()
+                if df_m.empty:
+                    continue
+                df_m = df_m.sort_values("alpha")
+                alphas = df_m["alpha"].values
+                means = df_m["mean"].values
+                stds = df_m["std"].values
+                baseline_label = format_baseline_label(bl)
+                label = f"{level} ({baseline_label})"
+                linestyle = level_linestyle_map.get(level, "-")
+                plt.plot(alphas, means, linestyle=linestyle, color=color, label=label)
+                lower = np.where(np.isfinite(stds), means - stds, np.nan)
+                upper = np.where(np.isfinite(stds), means + stds, np.nan)
+                plt.fill_between(alphas, lower, upper, alpha=0.15, color=color)
+                plotted_any = True
+        if not plotted_any:
+            plt.close()
+            continue
+        plt.xlabel("alpha")
+        plt.ylabel(metric)
+        plt.title(f"{metric} across alphas (mean±std) — levels vs baselines")
+        plt.legend(ncol=2)
+        plt.grid(True, linestyle=":", linewidth=0.5)
+        base_name = f"AB_{metric}_mean_std_across_levels"
+        plt.tight_layout()
+        plt.savefig(os.path.join(plots_dir, base_name + ".svg"))
+        plt.savefig(os.path.join(plots_dir, base_name + ".png"), dpi=150)
+        plt.close()
