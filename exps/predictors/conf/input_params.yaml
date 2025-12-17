@@ -10,9 +10,9 @@ max_configs: 32       # Maximum number of hyperparameter configurations to try
 # Models to train - specify which hierarchical levels to train
 # models_to_train: ["family", "major", "leaf"]
 # models_to_train: ["major", "leaf"]
-# models_to_train: ["family"]
+models_to_train: ["family"]
 # models_to_train: ["major"]
-models_to_train: ["leaf"]
+# models_to_train: ["leaf"]
 
 # Hyperparameters for each model level
 # You can override the default hyperparameter grids for each level

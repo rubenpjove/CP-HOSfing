@@ -1043,8 +1043,39 @@ def run_baseline_scp(
     m_scp = int(input_params.get("scp_m", 4))
     logger.info(f"S-CP hyperparameter m (max nodes): {m_scp}")
     
+    # Get S-CP fallback mode
+    use_fallback = bool(input_params.get("scp_use_fallback", False))
+    logger.info(f"S-CP fallback mode: {'pragmatic' if use_fallback else 'rigorous'}")
+    
+    # Validate inputs before creating solver factory
+    if probs_cal_leaf is None or leaf_vocab_global is None:
+        raise ValueError("Missing required data for S-CP: probs_cal_leaf or leaf_vocab_global is None")
+    
+    if probs_cal_leaf.shape[1] != len(leaf_vocab_global):
+        raise ValueError(
+            f"Critical alignment error: probs_cal_leaf has {probs_cal_leaf.shape[1]} classes, "
+            f"but leaf_vocab_global has {len(leaf_vocab_global)} classes. "
+            "Probabilities must be aligned with vocabulary. Check that classes_ was properly saved and loaded."
+        )
+    
+    logger.info(
+        f"S-CP input validation: "
+        f"probs_cal_shape={probs_cal_leaf.shape}, "
+        f"leaf_vocab_size={len(leaf_vocab_global)}, "
+        f"major_vocab_size={len(major_vocab_global)}, "
+        f"family_vocab_size={len(family_vocab_global)}, "
+        f"m={m_scp}"
+    )
+    
     # Create solver factory for calibration
     def solver_factory(leaf_probs):
+        # Validate each probability vector before creating solver
+        if len(leaf_probs) != len(leaf_vocab_global):
+            raise ValueError(
+                f"Solver factory: dimension mismatch - "
+                f"leaf_probs has {len(leaf_probs)} elements, "
+                f"leaf_vocab_global has {len(leaf_vocab_global)} elements"
+            )
         return StructuredCPSolver(
             leaf_probs=leaf_probs,
             leaf_vocab_global=leaf_vocab_global,
@@ -1054,11 +1085,29 @@ def run_baseline_scp(
             major_to_family=major_to_family_global,
             leaf_to_family=leaf_to_family_global,
             m=m_scp,
+            use_fallback=use_fallback,
             logger=logger,
         )
     
     # Calibrate tau
     logger.info("Calibrating S-CP tau...")
+    logger.info(
+        f"S-CP calibration inputs: "
+        f"n_cal_samples={probs_cal_leaf.shape[0]}, "
+        f"n_classes={probs_cal_leaf.shape[1]}, "
+        f"alpha={alpha_single}, "
+        f"target_coverage={1.0 - alpha_single:.4f}"
+    )
+    
+    # Validate calibration labels are in vocabulary
+    cal_label_vocab_overlap = np.sum(np.isin(y_cal_leaf_global, leaf_vocab_global))
+    if cal_label_vocab_overlap != len(y_cal_leaf_global):
+        logger.warning(
+            f"Calibration label-vocab mismatch: "
+            f"{cal_label_vocab_overlap}/{len(y_cal_leaf_global)} labels in vocab. "
+            "This may cause coverage issues."
+        )
+    
     cal_start_time_SCP = time.time()
     tau_optimal, cal_info = calibrate_scp(
         solver_factory=solver_factory,
@@ -1068,27 +1117,68 @@ def run_baseline_scp(
         logger=logger,
     )
     cal_time_SCP = time.time() - cal_start_time_SCP
-    logger.info(f"S-CP calibration complete: tau={tau_optimal:.6f}, time={cal_time_SCP:.4f}s")
+    logger.info(
+        f"S-CP calibration complete: "
+        f"tau={tau_optimal:.6f}, "
+        f"coverage={cal_info.get('coverage', 'N/A'):.4f}, "
+        f"target={cal_info.get('target_coverage', 'N/A'):.4f}, "
+        f"time={cal_time_SCP:.4f}s"
+    )
     
     # Solve S-CP for test set
     logger.info("Solving S-CP for test set...")
+    logger.info(
+        f"S-CP test inputs: "
+        f"n_test_samples={probs_test_leaf.shape[0]}, "
+        f"n_classes={probs_test_leaf.shape[1]}, "
+        f"tau={tau_optimal:.6f}"
+    )
+    
+    # Validate test labels are in vocabulary
+    test_label_vocab_overlap = np.sum(np.isin(y_test_leaf_global, leaf_vocab_global))
+    if test_label_vocab_overlap != len(y_test_leaf_global):
+        logger.warning(
+            f"Test label-vocab mismatch: "
+            f"{test_label_vocab_overlap}/{len(y_test_leaf_global)} labels in vocab. "
+            "This may cause evaluation issues."
+        )
+    
     test_start_time_SCP = time.time()
     n_test = probs_test_leaf.shape[0]
     scp_sets_global: Dict[int, Set[int]] = {}  # sample_idx -> set of global node indices
     
     empty_set_count = 0
+    solver_failures = 0
     for i in range(n_test):
         leaf_probs = probs_test_leaf[i]
-        solver = solver_factory(leaf_probs)
-        selected_nodes = solver.solve(tau_optimal)
-        sample_idx = int(idx_test_leaf_seen[i])
-        scp_sets_global[sample_idx] = selected_nodes
-        if len(selected_nodes) == 0:
+        try:
+            solver = solver_factory(leaf_probs)
+            selected_nodes = solver.solve(tau_optimal)
+            sample_idx = int(idx_test_leaf_seen[i])
+            scp_sets_global[sample_idx] = selected_nodes
+            if len(selected_nodes) == 0:
+                empty_set_count += 1
+        except Exception as e:
+            solver_failures += 1
+            logger.error(f"S-CP solver failed for test sample {i}: {e}")
+            sample_idx = int(idx_test_leaf_seen[i])
+            scp_sets_global[sample_idx] = set()  # Empty set on failure
             empty_set_count += 1
     
+    test_time_SCP = time.time() - test_start_time_SCP
     if empty_set_count > 0:
-        logger.warning(f"S-CP solver returned {empty_set_count}/{n_test} empty sets")
-    logger.info(f"S-CP sets computed: {n_test - empty_set_count} non-empty, {empty_set_count} empty")
+        logger.warning(
+            f"S-CP solver returned {empty_set_count}/{n_test} empty sets "
+            f"({100.0 * empty_set_count / n_test:.1f}%)"
+        )
+    if solver_failures > 0:
+        logger.error(f"S-CP solver failed for {solver_failures}/{n_test} test samples")
+    logger.info(
+        f"S-CP sets computed: "
+        f"{n_test - empty_set_count} non-empty, "
+        f"{empty_set_count} empty, "
+        f"time={test_time_SCP:.4f}s"
+    )
     
     # Project S-CP sets to levels
     logger.info("Projecting S-CP sets to Family/Major/Minor levels...")
@@ -1161,8 +1251,8 @@ def run_baseline_scp(
     metrics_SCP_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
     metrics_SCP_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
     metrics_SCP_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
-    test_time_SCP = time.time() - test_start_time_SCP
-    logger.info(f"S-CP testing: num_test_samples={n_test}, time={test_time_SCP:.4f}s")
+    # test_time_SCP already computed above after solving
+    logger.info(f"S-CP evaluation: num_test_samples={n_test}, time={test_time_SCP:.4f}s")
     
     # Compute top1_acc_non_empty and base_top1_acc
     if keep_leaf_bool.shape[0] > 0:
@@ -1535,8 +1625,15 @@ def run_baseline_a_one_shot(
         # Compute class ordering (global indices) to align with model outputs
         classes_global = bundle.get("classes_")
         if classes_global is None:
+            logger.warning(
+                f"classes_ not found in bundle for {level} level. "
+                "Falling back to dataset classes, which may cause misalignment with model outputs. "
+                "Please retrain the model to regenerate artifacts with classes_."
+            )
             # Use all defined labels in the dataset to avoid truncating classes not present in this split
             classes_global = np.unique(df.loc[df[f"{level}_idx"].notna(), f"{level}_idx"].astype("int64").values)
+        else:
+            logger.info(f"Using classes_ from bundle for {level} level: {len(classes_global)} classes")
         class_to_local = {c: i for i, c in enumerate(classes_global)}
 
         # Calibration data (seen classes only)
@@ -1546,6 +1643,14 @@ def run_baseline_a_one_shot(
         if idx_cal_seen.size == 0:
             raise ValueError(f"Calibration set empty for level='{level}' after filtering to seen classes.")
         probs_cal = predict_proba(bundle, df.iloc[idx_cal_seen][feature_cols])
+        # Validate probability dimensions match expected classes
+        if probs_cal.shape[1] != len(classes_global):
+            raise ValueError(
+                f"Probability dimension mismatch for {level} level: "
+                f"model outputs {probs_cal.shape[1]} classes, but classes_global has {len(classes_global)} classes. "
+                "This indicates a misalignment between model training and inference. "
+                "Please retrain the model to ensure consistency."
+            )
         y_cal_local = np.array([class_to_local[g] for g in y_cal_global[cal_seen_mask]], dtype="int64")
 
         # Test data (seen classes only)
@@ -1553,6 +1658,14 @@ def run_baseline_a_one_shot(
         test_seen_mask = np.array([g in class_to_local for g in y_test_global])
         idx_test_seen = idx_test_k[test_seen_mask]
         probs_test = predict_proba(bundle, df.iloc[idx_test_seen][feature_cols]) if idx_test_seen.size > 0 else np.empty((0, len(classes_global)))
+        # Validate probability dimensions match expected classes
+        if idx_test_seen.size > 0 and probs_test.shape[1] != len(classes_global):
+            raise ValueError(
+                f"Probability dimension mismatch for {level} level (test): "
+                f"model outputs {probs_test.shape[1]} classes, but classes_global has {len(classes_global)} classes. "
+                "This indicates a misalignment between model training and inference. "
+                "Please retrain the model to ensure consistency."
+            )
         y_test_local = np.array([class_to_local[g] for g in y_test_global[test_seen_mask]], dtype="int64")
 
         # Calibration quantile
@@ -1579,6 +1692,31 @@ def run_baseline_a_one_shot(
             y_test_leaf_global_aligned = y_test_global[test_seen_mask]
             y_cal_leaf_global_aligned = y_cal_global[cal_seen_mask]
             leaf_vocab_global = classes_global
+            
+            # Log alignment information for S-CP
+            logger.info(
+                f"Leaf level alignment for S-CP: "
+                f"vocab_size={len(leaf_vocab_global)}, "
+                f"probs_cal_shape={probs_cal_leaf.shape}, "
+                f"probs_test_shape={probs_test_leaf.shape}, "
+                f"n_cal_samples={len(y_cal_leaf_global_aligned)}, "
+                f"n_test_samples={len(y_test_leaf_global_aligned)}"
+            )
+            
+            # Validate that all calibration/test labels are in vocabulary
+            cal_labels_in_vocab = np.sum(np.isin(y_cal_leaf_global_aligned, leaf_vocab_global))
+            test_labels_in_vocab = np.sum(np.isin(y_test_leaf_global_aligned, leaf_vocab_global))
+            
+            if cal_labels_in_vocab != len(y_cal_leaf_global_aligned):
+                logger.warning(
+                    f"Some calibration labels not in vocabulary: "
+                    f"{cal_labels_in_vocab}/{len(y_cal_leaf_global_aligned)} labels found in vocab"
+                )
+            if test_labels_in_vocab != len(y_test_leaf_global_aligned):
+                logger.warning(
+                    f"Some test labels not in vocabulary: "
+                    f"{test_labels_in_vocab}/{len(y_test_leaf_global_aligned)} labels found in vocab"
+                )
         elif (compute_B or compute_SCP) and level == "major":
             major_vocab_global = classes_global
         elif (compute_B or compute_SCP) and level == "family":

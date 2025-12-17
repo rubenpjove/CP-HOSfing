@@ -48,6 +48,7 @@ class StructuredCPSolver:
         major_to_family: Dict[int, int],
         leaf_to_family: Dict[int, int],
         m: int = 4,
+        use_fallback: bool = False,
         logger: Optional[logging.Logger] = None,
     ):
         """
@@ -62,6 +63,7 @@ class StructuredCPSolver:
             major_to_family: Dict mapping major global idx -> family global idx
             leaf_to_family: Dict mapping leaf global idx -> family global idx
             m: Maximum number of nodes allowed in prediction set
+            use_fallback: If True, return all families on solver failure (pragmatic). If False, return empty set (rigorous).
             logger: Optional logger instance
         """
         if not MIP_AVAILABLE:
@@ -69,6 +71,39 @@ class StructuredCPSolver:
                 "Neither 'mip' nor 'pulp' library is available. "
                 "Please install one: pip install mip or pip install pulp"
             )
+        
+        # Validate input dimensions and alignment
+        leaf_probs = np.asarray(leaf_probs)
+        leaf_vocab_global = np.asarray(leaf_vocab_global)
+        
+        if len(leaf_probs) != len(leaf_vocab_global):
+            raise ValueError(
+                f"Probability-vocabulary dimension mismatch: "
+                f"leaf_probs has {len(leaf_probs)} elements, but leaf_vocab_global has {len(leaf_vocab_global)} elements. "
+                "This indicates a critical alignment error. Probabilities must be aligned with vocabulary indices."
+            )
+        
+        # Validate probability properties
+        prob_sum = float(np.sum(leaf_probs))
+        prob_min = float(np.min(leaf_probs))
+        prob_max = float(np.max(leaf_probs))
+        
+        if prob_sum < 0.99 or prob_sum > 1.01:
+            self.logger.warning(
+                f"Leaf probabilities do not sum to 1.0: sum={prob_sum:.6f}. "
+                "This may indicate normalization issues or missing classes."
+            )
+        
+        if prob_min < 0.0 or prob_max > 1.0:
+            raise ValueError(
+                f"Invalid probability values: min={prob_min:.6f}, max={prob_max:.6f}. "
+                "Probabilities must be in [0, 1]."
+            )
+        
+        self.logger.debug(
+            f"S-CP solver initialized: n_leaves={len(leaf_probs)}, "
+            f"prob_sum={prob_sum:.6f}, prob_range=[{prob_min:.6f}, {prob_max:.6f}]"
+        )
         
         self.leaf_probs = leaf_probs
         self.leaf_vocab_global = leaf_vocab_global
@@ -78,6 +113,7 @@ class StructuredCPSolver:
         self.major_to_family = major_to_family
         self.leaf_to_family = leaf_to_family
         self.m = m
+        self.use_fallback = use_fallback
         self.logger = logger or logging.getLogger(__name__)
         
         # Build reverse mappings and ancestor/descendant relationships
@@ -152,20 +188,15 @@ class StructuredCPSolver:
         """
         # 1. Cast tau to native python float
         tau = float(tau)
+        total_mass = float(np.sum(self.leaf_probs))
         
-        # 2. Feasibility Check with Epsilon
-        # Use a small epsilon to handle floating point errors (e.g. sum is 0.999999 vs 1.0)
-        EPS = 1e-6
-        max_prob_mass = float(np.sum(self.leaf_probs))
+        # Robustness: If tau is asked to be 1.0 (or higher than sum), 
+        # cap it slightly below the total mass to prevent numerical infeasibility.
+        # This prevents the "OptimizationStatus.ERROR" crashes.
+        effective_tau = min(tau, total_mass - 1e-7)
         
-        # If the request is mathematically impossible, return empty
-        if tau > max_prob_mass + EPS:
-            if self.logger:
-                self.logger.debug(f"tau={tau:.4f} exceeds max_prob_mass={max_prob_mass:.4f}, returning empty set")
+        if effective_tau <= 0:
             return set()
-            
-        # Relax tau slightly to prevent strict boundary failures
-        effective_tau = max(0.0, tau - EPS)
 
         try:
             # Setup Model
@@ -252,17 +283,28 @@ class StructuredCPSolver:
                         selected_nodes.add(global_idx)
                 return selected_nodes
             else:
-                # If infeasible (rare with epsilon) or error, fallback to highest probability family
-                if self.logger:
-                    self.logger.debug(f"Solver non-optimal. Tau={tau:.4f}, m={self.m}")
-                # Fallback: return family node with highest probability mass
-                return self._fallback_solution()
+                # --- Fallback on solver failure ---
+                if self.use_fallback:
+                    # Pragmatic: return all families to ensure coverage
+                    if self.logger:
+                        self.logger.debug(f"Solver failed (Status={model.status}). Fallback to all families (pragmatic).")
+                    return set(self.family_vocab_global)
+                else:
+                    # Rigorous: return empty set to expose method limitations
+                    if self.logger:
+                        self.logger.debug(f"Solver failed (Status={model.status}). Returning empty set (rigorous).")
+                    return set()
                 
         except Exception as e:
             if self.logger:
                 self.logger.error(f"ILP Exception: {str(e)}")
             # Fallback on exception
-            return self._fallback_solution()
+            if self.use_fallback:
+                # Pragmatic: return all families to ensure coverage
+                return set(self.family_vocab_global)
+            else:
+                # Rigorous: return empty set to expose method limitations
+                return set()
     
     def _fallback_solution(self) -> Set[int]:
         """
@@ -325,13 +367,59 @@ def calibrate_scp(
     Returns:
         Tuple of (optimal_tau, calibration_info_dict)
     """
+    """
+    Calibrate tau for S-CP to achieve target coverage 1-alpha.
+    
+    Args:
+        solver_factory: Function that creates StructuredCPSolver given leaf_probs
+        probs_cal: [n_cal, n_leaves] array of leaf probabilities for calibration set
+        y_cal_global: [n_cal] array of true leaf global indices
+        alpha: Target miscoverage rate
+        tau_grid: Optional grid of tau values to search (default: np.linspace(0, 1, 100))
+        logger: Optional logger instance
+        
+    Returns:
+        Tuple of (optimal_tau, calibration_info_dict)
+    """
     if logger is None:
         logger = logging.getLogger(__name__)
+    
+    # Validate inputs
+    probs_cal = np.asarray(probs_cal)
+    y_cal_global = np.asarray(y_cal_global)
+    
+    if len(probs_cal.shape) != 2:
+        raise ValueError(f"probs_cal must be 2D array, got shape {probs_cal.shape}")
+    
+    n_cal, n_leaves = probs_cal.shape
+    
+    if len(y_cal_global) != n_cal:
+        raise ValueError(
+            f"Dimension mismatch: probs_cal has {n_cal} samples, "
+            f"but y_cal_global has {len(y_cal_global)} samples"
+        )
+    
+    # Validate probability properties
+    prob_sums = np.sum(probs_cal, axis=1)
+    prob_sum_mean = float(np.mean(prob_sums))
+    prob_sum_std = float(np.std(prob_sums))
+    
+    if prob_sum_mean < 0.99 or prob_sum_mean > 1.01:
+        logger.warning(
+            f"Calibration probabilities do not sum to 1.0 on average: "
+            f"mean={prob_sum_mean:.6f}, std={prob_sum_std:.6f}"
+        )
+    
+    logger.debug(
+        f"Calibration input validation: "
+        f"n_cal={n_cal}, n_leaves={n_leaves}, "
+        f"prob_sum_mean={prob_sum_mean:.6f}, "
+        f"prob_sum_std={prob_sum_std:.6f}"
+    )
     
     if tau_grid is None:
         tau_grid = np.linspace(0.0, 1.0, 100)
     
-    n_cal = probs_cal.shape[0]
     target_coverage = 1.0 - alpha
     
     # Pre-compute maximum achievable probability mass for each calibration sample
@@ -388,14 +476,18 @@ def calibrate_scp(
         
         logger.debug(f"tau={tau:.4f}, coverage={coverage:.4f}")
         
+        # === THE FIX: Relationship: Lower Tau -> Easier to satisfy -> Higher Coverage ===
         if coverage >= target_coverage:
-            # This tau works, try smaller tau
+            # We have enough coverage. 
+            # Try to INCREASE tau to make sets smaller (optimization), 
+            # while staying above target.
             best_tau = tau
             best_coverage = coverage
-            right = mid - 1
+            left = mid + 1  # <--- Moved from 'else' block
         else:
-            # Need larger tau
-            left = mid + 1
+            # Not enough coverage.
+            # We need to DECREASE tau to make it easier to include nodes.
+            right = mid - 1  # <--- Moved from 'if' block
     
     if best_tau is None:
         # Fallback: use largest feasible tau (not tau=1.0 which might be infeasible)

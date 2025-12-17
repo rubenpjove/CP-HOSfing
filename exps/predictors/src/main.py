@@ -149,6 +149,7 @@ def main():
 		"n_features_selected",
 		"in_dim",
 		"out_dim",
+		"classes_",
 	]
 	preproc = {k: bundle[k] for k in keys_to_save if k in bundle}
 	joblib.dump(preproc, f"{level}_preproc.joblib")

@@ -159,6 +159,14 @@ def load_model_bundle(level: str, out_dir: str, logger: logging.Logger):
     model.eval()
     
     # Build bundle
+    classes_ = preproc.get("classes_")
+    if classes_ is None:
+        logger.warning(
+            f"classes_ not found in preproc for {level} level. "
+            "This may cause alignment issues with model outputs. "
+            "Please retrain the model to regenerate artifacts with classes_."
+        )
+    
     bundle = {
         "model": model,
         "encoder": encoder,
@@ -170,7 +178,7 @@ def load_model_bundle(level: str, out_dir: str, logger: logging.Logger):
         "numerical_features": preproc.get("numerical_features", []),
         "best_params": best_params,
         "target_col": f"{level}_idx",
-        "classes_": None,  # We'll need to get this from y_space
+        "classes_": classes_,
         "feature_selection_method": preproc.get("feature_selection_method"),
         "n_features_selected": preproc.get("n_features_selected"),
     }
