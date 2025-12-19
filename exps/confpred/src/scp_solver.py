@@ -71,7 +71,10 @@ class StructuredCPSolver:
                 "Neither 'mip' nor 'pulp' library is available. "
                 "Please install one: pip install mip or pip install pulp"
             )
-        
+
+        # Initialize logger early so it is available for all checks below
+        self.logger = logger or logging.getLogger(__name__)
+
         # Validate input dimensions and alignment
         leaf_probs = np.asarray(leaf_probs)
         leaf_vocab_global = np.asarray(leaf_vocab_global)
@@ -89,10 +92,11 @@ class StructuredCPSolver:
         prob_max = float(np.max(leaf_probs))
         
         if prob_sum < 0.99 or prob_sum > 1.01:
-            self.logger.warning(
-                f"Leaf probabilities do not sum to 1.0: sum={prob_sum:.6f}. "
-                "This may indicate normalization issues or missing classes."
-            )
+            if self.logger:
+                self.logger.warning(
+                    f"Leaf probabilities do not sum to 1.0: sum={prob_sum:.6f}. "
+                    "This may indicate normalization issues or missing classes."
+                )
         
         if prob_min < 0.0 or prob_max > 1.0:
             raise ValueError(
@@ -100,10 +104,11 @@ class StructuredCPSolver:
                 "Probabilities must be in [0, 1]."
             )
         
-        self.logger.debug(
-            f"S-CP solver initialized: n_leaves={len(leaf_probs)}, "
-            f"prob_sum={prob_sum:.6f}, prob_range=[{prob_min:.6f}, {prob_max:.6f}]"
-        )
+        if self.logger:
+            self.logger.debug(
+                f"S-CP solver initialized: n_leaves={len(leaf_probs)}, "
+                f"prob_sum={prob_sum:.6f}, prob_range=[{prob_min:.6f}, {prob_max:.6f}]"
+            )
         
         self.leaf_probs = leaf_probs
         self.leaf_vocab_global = leaf_vocab_global
@@ -114,7 +119,6 @@ class StructuredCPSolver:
         self.leaf_to_family = leaf_to_family
         self.m = m
         self.use_fallback = use_fallback
-        self.logger = logger or logging.getLogger(__name__)
         
         # Build reverse mappings and ancestor/descendant relationships
         self._build_hierarchy_maps()
@@ -476,18 +480,12 @@ def calibrate_scp(
         
         logger.debug(f"tau={tau:.4f}, coverage={coverage:.4f}")
         
-        # === THE FIX: Relationship: Lower Tau -> Easier to satisfy -> Higher Coverage ===
         if coverage >= target_coverage:
-            # We have enough coverage. 
-            # Try to INCREASE tau to make sets smaller (optimization), 
-            # while staying above target.
             best_tau = tau
             best_coverage = coverage
-            left = mid + 1  # <--- Moved from 'else' block
+            right = mid - 1
         else:
-            # Not enough coverage.
-            # We need to DECREASE tau to make it easier to include nodes.
-            right = mid - 1  # <--- Moved from 'if' block
+            left = mid + 1
     
     if best_tau is None:
         # Fallback: use largest feasible tau (not tau=1.0 which might be infeasible)
@@ -545,6 +543,138 @@ def _is_leaf_covered(
     return False
 
 
+def diagnose_probability_shift(
+    probs_cal: np.ndarray,
+    y_cal_global: np.ndarray,
+    probs_test: np.ndarray,
+    y_test_global: np.ndarray,
+    leaf_vocab_global: np.ndarray,
+    logger: logging.Logger
+):
+    """
+    Analyzes if there is a distribution shift in model confidence between Calibration and Test sets.
+    
+    This diagnostic helps identify if S-CP under-coverage is due to the model being less confident
+    on test data compared to calibration data. If test data has lower true-class probabilities,
+    the tau threshold learned on calibration data may be too strict for test data.
+    
+    Args:
+        probs_cal: [n_cal, n_leaves] array of leaf probabilities for calibration set
+        y_cal_global: [n_cal] array of true leaf global indices for calibration set
+        probs_test: [n_test, n_leaves] array of leaf probabilities for test set
+        y_test_global: [n_test] array of true leaf global indices for test set
+        leaf_vocab_global: Array of global leaf indices (vocabulary)
+        logger: Logger instance for output
+    """
+    # Build Map: Global ID -> Local Column Index
+    g2l = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    
+    def get_true_probs(probs, labels_global):
+        """Extract probabilities of the true label for each sample."""
+        true_class_probs = []
+        skipped_count = 0
+        for i, global_id in enumerate(labels_global):
+            global_id_int = int(global_id)
+            # Skip if label not in vocabulary (shouldn't happen with filtered data, but handle gracefully)
+            if global_id_int not in g2l:
+                skipped_count += 1
+                continue
+            col_idx = g2l[global_id_int]
+            p_true = float(probs[i, col_idx])
+            true_class_probs.append(p_true)
+        
+        if skipped_count > 0:
+            logger.warning(
+                f"diagnose_probability_shift: Skipped {skipped_count}/{len(labels_global)} samples "
+                f"with labels not in vocabulary"
+            )
+        
+        return np.array(true_class_probs)
+
+    # Extract Probabilities of the True Label
+    scores_cal = get_true_probs(probs_cal, y_cal_global)
+    scores_test = get_true_probs(probs_test, y_test_global)
+    
+    if len(scores_cal) == 0 or len(scores_test) == 0:
+        logger.warning(
+            "diagnose_probability_shift: Cannot compute statistics - "
+            f"cal_samples={len(scores_cal)}, test_samples={len(scores_test)}"
+        )
+        return
+
+    # Compute Statistics
+    mean_cal = float(np.mean(scores_cal))
+    mean_test = float(np.mean(scores_test))
+    median_cal = float(np.median(scores_cal))
+    median_test = float(np.median(scores_test))
+    std_cal = float(np.std(scores_cal))
+    std_test = float(np.std(scores_test))
+    
+    # "Hard Samples": How often is the model < 10% confident in the truth?
+    hard_cal = float(np.mean(scores_cal < 0.10))
+    hard_test = float(np.mean(scores_test < 0.10))
+    
+    # Additional statistics: very low confidence samples (< 1%)
+    very_hard_cal = float(np.mean(scores_cal < 0.01))
+    very_hard_test = float(np.mean(scores_test < 0.01))
+    
+    # Percentiles for tail analysis
+    p10_cal = float(np.percentile(scores_cal, 10))
+    p10_test = float(np.percentile(scores_test, 10))
+    p25_cal = float(np.percentile(scores_cal, 25))
+    p25_test = float(np.percentile(scores_test, 25))
+
+    # Log Results
+    logger.info("=" * 80)
+    logger.info("DIAGNOSTIC: Calibration vs Test Probability Shift")
+    logger.info("=" * 80)
+    logger.info(f"Sample sizes: Cal={len(scores_cal)}, Test={len(scores_test)}")
+    logger.info("")
+    logger.info("True Class Probability Statistics:")
+    logger.info(f"  Mean    : Cal={mean_cal:.4f} vs Test={mean_test:.4f} (Diff: {mean_test-mean_cal:+.4f})")
+    logger.info(f"  Median  : Cal={median_cal:.4f} vs Test={median_test:.4f} (Diff: {median_test-median_cal:+.4f})")
+    logger.info(f"  Std Dev : Cal={std_cal:.4f} vs Test={std_test:.4f}")
+    logger.info("")
+    logger.info("Percentiles (tail analysis):")
+    logger.info(f"  10th percentile: Cal={p10_cal:.4f} vs Test={p10_test:.4f} (Diff: {p10_test-p10_cal:+.4f})")
+    logger.info(f"  25th percentile: Cal={p25_cal:.4f} vs Test={p25_test:.4f} (Diff: {p25_test-p25_cal:+.4f})")
+    logger.info("")
+    logger.info("Hard Sample Rates:")
+    logger.info(f"  P(True) < 0.10: Cal={hard_cal:.2%} vs Test={hard_test:.2%} (Diff: {hard_test-hard_cal:+.2%})")
+    logger.info(f"  P(True) < 0.01: Cal={very_hard_cal:.2%} vs Test={very_hard_test:.2%} (Diff: {very_hard_test-very_hard_cal:+.2%})")
+    logger.info("")
+    
+    # Interpretation
+    if mean_test < mean_cal - 0.05:  # Significant drop (>5 percentage points)
+        logger.warning(">>> DETECTED SIGNIFICANT SHIFT: Model is less confident on Test data.")
+        logger.warning(">>> This explains S-CP under-coverage: The tau learned on Cal is too strict for Test.")
+        logger.warning(">>> The model's average confidence dropped by {:.1%} on test data.".format(mean_cal - mean_test))
+    elif mean_test < mean_cal - 0.01:  # Small drop (1-5 percentage points)
+        logger.warning(">>> DETECTED MILD SHIFT: Model is slightly less confident on Test data.")
+        logger.warning(">>> This may contribute to S-CP under-coverage.")
+    else:
+        logger.info(">>> No significant confidence drop detected between Cal and Test.")
+        if hard_test > hard_cal + 0.05:
+            logger.info(">>> However, Test set has more 'hard' samples (P<0.10), which may affect tail coverage.")
+    
+    logger.info("=" * 80)
+
+
+def _get_label(gid: int, mapping: Optional[Dict[int, str]]) -> str:
+    """Helper function to safely convert global ID to class label.
+    
+    Args:
+        gid: Global ID (integer)
+        mapping: Optional dictionary mapping global ID to class label string
+        
+    Returns:
+        Class label string if mapping provided, otherwise string representation of gid
+    """
+    if mapping is not None:
+        return mapping.get(gid, str(gid))
+    return str(gid)
+
+
 def project_scp_to_levels(
     scp_set: Set[int],
     leaf_vocab_global: np.ndarray,
@@ -553,6 +683,10 @@ def project_scp_to_levels(
     leaf_to_major: Dict[int, int],
     major_to_family: Dict[int, int],
     leaf_to_family: Dict[int, int],
+    logger: Optional[logging.Logger] = None,
+    idx2id_map_leaf: Optional[Dict[int, str]] = None,
+    idx2id_map_major: Optional[Dict[int, str]] = None,
+    idx2id_map_family: Optional[Dict[int, str]] = None,
 ) -> Dict[str, Set[int]]:
     """
     Project S-CP prediction set to Family, Major, and Minor level sets.
@@ -570,87 +704,332 @@ def project_scp_to_levels(
         leaf_to_major: Dict mapping leaf global idx -> major global idx
         major_to_family: Dict mapping major global idx -> family global idx
         leaf_to_family: Dict mapping leaf global idx -> family global idx
+        logger: Optional logger instance for debugging
+        idx2id_map_leaf: Optional dict mapping global leaf idx -> class label string
+        idx2id_map_major: Optional dict mapping global major idx -> class label string
+        idx2id_map_family: Optional dict mapping global family idx -> class label string
         
     Returns:
         Dict with keys "family", "major", "leaf" mapping to sets of global indices
     """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    
     # Initialize result sets
     family_set = set()
     major_set = set()
     leaf_set = set()
     
     # Build reverse mappings for descendants
-    major_to_leaves: Dict[int, Set[int]] = defaultdict(set)
+    major_to_leaves: Dict[int, Set[int]] = {}
     family_to_majors: Dict[int, Set[int]] = defaultdict(set)
     family_to_leaves: Dict[int, Set[int]] = defaultdict(set)
     
+    # Initialize major_to_leaves for ALL majors in vocabulary (even if they have no leaves)
+    # This ensures consistency when processing families that contain majors without leaves
+    major_vocab_set = set(int(g) for g in major_vocab_global)
+    for major_gid in major_vocab_global:
+        major_to_leaves[int(major_gid)] = set()
+    
+    # Build major->leaves and family->leaves mappings from leaves
+    # Ensure all IDs are converted to integers for type consistency
     for leaf_gid in leaf_vocab_global:
-        major_gid = leaf_to_major.get(leaf_gid)
-        family_gid = leaf_to_family.get(leaf_gid)
-        if family_gid is None and major_gid is not None:
-            family_gid = major_to_family.get(major_gid)
-        
+        leaf_gid_int = int(leaf_gid)
+        major_gid = leaf_to_major.get(leaf_gid_int)
         if major_gid is not None:
-            major_to_leaves[major_gid].add(leaf_gid)
+            major_gid_int = int(major_gid)
+        else:
+            major_gid_int = None
+            
+        family_gid = leaf_to_family.get(leaf_gid_int)
+        if family_gid is None and major_gid_int is not None:
+            family_gid = major_to_family.get(major_gid_int)
+        
+        if major_gid_int is not None and major_gid_int in major_vocab_set:
+            # Only add if major is in vocabulary
+            major_to_leaves[major_gid_int].add(leaf_gid_int)
         if family_gid is not None:
-            family_to_leaves[family_gid].add(leaf_gid)
-            if major_gid is not None:
-                family_to_majors[family_gid].add(major_gid)
+            family_gid_int = int(family_gid)
+            family_to_leaves[family_gid_int].add(leaf_gid_int)
+    
+    # Build family->majors mapping from ALL majors in vocabulary (not just those with leaves)
+    # This ensures that when a family is selected, ALL its majors are added, even if some
+    # majors don't have leaves in leaf_vocab_global
+    for major_gid in major_vocab_global:
+        major_gid_int = int(major_gid)
+        family_gid = major_to_family.get(major_gid_int)
+        if family_gid is not None:
+            family_gid_int = int(family_gid)
+            family_to_majors[family_gid_int].add(major_gid_int)
+    
+    # Defensive check: Verify all majors are captured
+    majors_with_leaves = set(major_to_leaves.keys())
+    majors_missing_leaves = major_vocab_set - majors_with_leaves
+    
+    if majors_missing_leaves:
+        logger.debug(
+            f"S-CP projection: Found {len(majors_missing_leaves)} majors in vocabulary "
+            f"without leaves in leaf_vocab_global. These are still included in "
+            f"family_to_majors mappings via the comprehensive build."
+        )
     
     # Convert vocabularies to sets for faster O(1) membership checks and type safety
     family_vocab_set = set(int(g) for g in family_vocab_global)
-    major_vocab_set = set(int(g) for g in major_vocab_global)
     leaf_vocab_set = set(int(g) for g in leaf_vocab_global)
+    
+    # Log initial scp_set composition
+    scp_families = [n for n in scp_set if int(n) in family_vocab_set]
+    scp_majors = [n for n in scp_set if int(n) in major_vocab_set]
+    scp_leaves = [n for n in scp_set if int(n) in leaf_vocab_set]
+    scp_unknown = [n for n in scp_set if int(n) not in family_vocab_set and 
+                    int(n) not in major_vocab_set and int(n) not in leaf_vocab_set]
+    
+    logger.debug(
+        f"S-CP projection input: scp_set_size={len(scp_set)}, "
+        f"families={len(scp_families)}, majors={len(scp_majors)}, "
+        f"leaves={len(scp_leaves)}, unknown={len(scp_unknown)}"
+    )
+    
+    if scp_unknown:
+        logger.warning(
+            f"S-CP projection: Found {len(scp_unknown)} nodes in scp_set not in any vocabulary. "
+            f"These will be ignored. Unknown nodes: {scp_unknown[:10]}{'...' if len(scp_unknown) > 10 else ''}"
+        )
+    
+    # Helper function: Add a family and perform full downward projection
+    def add_family_with_descendants(fam_gid_int: int):
+        """Add a family to family_set and immediately add all its majors and their leaves."""
+        if fam_gid_int in family_set:
+            return  # Already processed
+        family_set.add(fam_gid_int)
+        
+        # Add all majors in this family
+        if fam_gid_int in family_to_majors:
+            majors_to_add = {int(m) for m in family_to_majors[fam_gid_int] if int(m) in major_vocab_set}
+            for major_gid in majors_to_add:
+                add_major_with_descendants(int(major_gid))
+        
+        # Also add leaves directly mapped to family (for completeness)
+        if fam_gid_int in family_to_leaves:
+            leaves_to_add = {int(l) for l in family_to_leaves[fam_gid_int] if int(l) in leaf_vocab_set}
+            leaf_set.update(leaves_to_add)
+    
+    # Helper function: Add a major and perform full downward projection
+    def add_major_with_descendants(maj_gid_int: int):
+        """Add a major to major_set and immediately add all its leaves."""
+        if maj_gid_int in major_set:
+            return  # Already processed
+        major_set.add(maj_gid_int)
+        
+        # Add all leaves under this major
+        if maj_gid_int in major_to_leaves:
+            leaves_to_add = {int(l) for l in major_to_leaves[maj_gid_int] if int(l) in leaf_vocab_set}
+            leaf_set.update(leaves_to_add)
     
     # Process each node in scp_set
     for node_gid in scp_set:
         node_gid_int = int(node_gid)  # Ensure integer type
         # Determine node type
         if node_gid_int in family_vocab_set:
-            # Family node
-            family_set.add(node_gid_int)
-            
-            # Add all descendants (majors and leaves)
-            if node_gid_int in family_to_majors:
-                major_set.update(family_to_majors[node_gid_int])
-            if node_gid_int in family_to_leaves:
-                leaf_set.update(family_to_leaves[node_gid_int])
-            
-            # Ancestors: none (family is root)
+            # Family node: add with full downward projection
+            add_family_with_descendants(node_gid_int)
             
         elif node_gid_int in major_vocab_set:
-            # Major node
-            major_set.add(node_gid_int)
+            # Major node: add with full downward projection
+            add_major_with_descendants(node_gid_int)
             
-            # Add ancestor (family)
+            # Add ancestor (family) with full downward projection
             family_gid = major_to_family.get(node_gid_int)
             if family_gid is not None:
-                family_set.add(int(family_gid))
-            
-            # Add descendants (leaves)
-            if node_gid_int in major_to_leaves:
-                leaf_set.update(major_to_leaves[node_gid_int])
+                add_family_with_descendants(int(family_gid))
             
         elif node_gid_int in leaf_vocab_set:
-            # Leaf node
+            # Leaf node: add to leaf_set
             leaf_set.add(node_gid_int)
             
-            # Add ancestors (major and family)
+            # Add ancestors with full downward projection
             major_gid = leaf_to_major.get(node_gid_int)
             if major_gid is not None:
-                major_set.add(int(major_gid))
+                add_major_with_descendants(int(major_gid))
             
             family_gid = leaf_to_family.get(node_gid_int)
             if family_gid is None and major_gid is not None:
                 family_gid = major_to_family.get(major_gid)
             if family_gid is not None:
-                family_set.add(int(family_gid))
+                add_family_with_descendants(int(family_gid))
             
-            # Descendants: none (leaf is terminal)
         else:
             # Node not found in any vocabulary - this shouldn't happen but log it
             # This could happen if there's a mismatch between solver output and vocabularies
-            pass
+            logger.debug(
+                f"S-CP projection: Node {node_gid_int} not found in any vocabulary, skipping"
+            )
+    
+    # Log final projection results
+    logger.debug(
+        f"S-CP projection output: "
+        f"family_set_size={len(family_set)}, "
+        f"major_set_size={len(major_set)}, "
+        f"leaf_set_size={len(leaf_set)}"
+    )
+    
+    # ===================================================================
+    # COMPREHENSIVE VALIDATION PASSES
+    # ===================================================================
+    
+    # Validation Pass 1: Check that all nodes in sets are in vocabularies
+    invalid_families = {f for f in family_set if int(f) not in family_vocab_set}
+    invalid_majors = {m for m in major_set if int(m) not in major_vocab_set}
+    invalid_leaves = {l for l in leaf_set if int(l) not in leaf_vocab_set}
+    
+    if invalid_families:
+        logger.warning(
+            f"S-CP projection validation: Found {len(invalid_families)} invalid family IDs "
+            f"not in vocabulary: {list(invalid_families)[:5]}{'...' if len(invalid_families) > 5 else ''}"
+        )
+    if invalid_majors:
+        logger.warning(
+            f"S-CP projection validation: Found {len(invalid_majors)} invalid major IDs "
+            f"not in vocabulary: {list(invalid_majors)[:5]}{'...' if len(invalid_majors) > 5 else ''}"
+        )
+    if invalid_leaves:
+        logger.warning(
+            f"S-CP projection validation: Found {len(invalid_leaves)} invalid leaf IDs "
+            f"not in vocabulary: {list(invalid_leaves)[:5]}{'...' if len(invalid_leaves) > 5 else ''}"
+        )
+    
+    # Validation Pass 2: Downward consistency - If a family is in the set, all its majors should be in major_set
+    downward_family_errors = 0
+    for fam_gid in family_set:
+        if fam_gid in family_to_majors:
+            # Only check majors that are in the vocabulary
+            expected_majors = {int(m) for m in family_to_majors[fam_gid] if int(m) in major_vocab_set}
+            # Ensure major_set contains integers for comparison
+            major_set_ints = {int(m) for m in major_set}
+            missing_majors = expected_majors - major_set_ints
+            if missing_majors:
+                # Convert to labels for better readability
+                fam_label = _get_label(fam_gid, idx2id_map_family)
+                missing_labels = [_get_label(m, idx2id_map_major) for m in list(missing_majors)[:5]]
+                missing_str = ", ".join(missing_labels)
+                if len(missing_majors) > 5:
+                    missing_str += "..."
+                
+                logger.warning(
+                    f"S-CP projection validation: Family {fam_label} (ID: {fam_gid}) is in family_set, "
+                    f"but {len(missing_majors)} of its majors are missing from major_set: {missing_str}"
+                )
+                logger.debug(
+                    f"S-CP projection validation debug: Family {fam_label} (ID: {fam_gid}), "
+                    f"expected_majors={len(expected_majors)}, "
+                    f"major_set_size={len(major_set_ints)}, "
+                    f"missing={len(missing_majors)}"
+                )
+                downward_family_errors += 1
+    
+    # Validation Pass 3: Downward consistency - If a major is in the set, all its leaves should be in leaf_set
+    downward_major_errors = 0
+    for maj_gid in major_set:
+        maj_gid_int = int(maj_gid)
+        if maj_gid_int in major_to_leaves:
+            # Only check leaves that are in the vocabulary
+            expected_leaves = {int(l) for l in major_to_leaves[maj_gid_int] if int(l) in leaf_vocab_set}
+            # Ensure leaf_set contains integers for comparison
+            leaf_set_ints = {int(l) for l in leaf_set}
+            missing_leaves = expected_leaves - leaf_set_ints
+            if missing_leaves:
+                # Convert to labels for better readability
+                maj_label = _get_label(maj_gid_int, idx2id_map_major)
+                missing_labels = [_get_label(l, idx2id_map_leaf) for l in list(missing_leaves)[:5]]
+                missing_str = ", ".join(missing_labels)
+                if len(missing_leaves) > 5:
+                    missing_str += "..."
+                
+                logger.warning(
+                    f"S-CP projection validation: Major {maj_label} (ID: {maj_gid_int}) is in major_set, "
+                    f"but {len(missing_leaves)} of its leaves are missing from leaf_set: {missing_str}"
+                )
+                logger.debug(
+                    f"S-CP projection validation debug: Major {maj_label} (ID: {maj_gid_int}), "
+                    f"expected_leaves={len(expected_leaves)}, "
+                    f"leaf_set_size={len(leaf_set_ints)}, "
+                    f"missing={len(missing_leaves)}"
+                )
+                downward_major_errors += 1
+    
+    # Validation Pass 4: Upward consistency - If a major is in major_set, its family should be in family_set
+    upward_major_errors = 0
+    for maj_gid in major_set:
+        maj_gid_int = int(maj_gid)
+        family_gid = major_to_family.get(maj_gid_int)
+        if family_gid is not None:
+            family_gid_int = int(family_gid)
+            if family_gid_int not in family_set:
+                maj_label = _get_label(maj_gid_int, idx2id_map_major)
+                fam_label = _get_label(family_gid_int, idx2id_map_family)
+                logger.warning(
+                    f"S-CP projection validation: Major {maj_label} (ID: {maj_gid_int}) is in major_set, "
+                    f"but its family {fam_label} (ID: {family_gid_int}) is missing from family_set"
+                )
+                upward_major_errors += 1
+    
+    # Validation Pass 5: Upward consistency - If a leaf is in leaf_set, its major should be in major_set
+    upward_leaf_major_errors = 0
+    for leaf_gid in leaf_set:
+        leaf_gid_int = int(leaf_gid)
+        major_gid = leaf_to_major.get(leaf_gid_int)
+        if major_gid is not None:
+            major_gid_int = int(major_gid)
+            if major_gid_int not in major_set:
+                leaf_label = _get_label(leaf_gid_int, idx2id_map_leaf)
+                maj_label = _get_label(major_gid_int, idx2id_map_major)
+                logger.warning(
+                    f"S-CP projection validation: Leaf {leaf_label} (ID: {leaf_gid_int}) is in leaf_set, "
+                    f"but its major {maj_label} (ID: {major_gid_int}) is missing from major_set"
+                )
+                upward_leaf_major_errors += 1
+    
+    # Validation Pass 6: Upward consistency - If a leaf is in leaf_set, its family should be in family_set
+    upward_leaf_family_errors = 0
+    for leaf_gid in leaf_set:
+        leaf_gid_int = int(leaf_gid)
+        family_gid = leaf_to_family.get(leaf_gid_int)
+        if family_gid is None:
+            # Try via major
+            major_gid = leaf_to_major.get(leaf_gid_int)
+            if major_gid is not None:
+                family_gid = major_to_family.get(int(major_gid))
+        if family_gid is not None:
+            family_gid_int = int(family_gid)
+            if family_gid_int not in family_set:
+                leaf_label = _get_label(leaf_gid_int, idx2id_map_leaf)
+                fam_label = _get_label(family_gid_int, idx2id_map_family)
+                logger.warning(
+                    f"S-CP projection validation: Leaf {leaf_label} (ID: {leaf_gid_int}) is in leaf_set, "
+                    f"but its family {fam_label} (ID: {family_gid_int}) is missing from family_set"
+                )
+                upward_leaf_family_errors += 1
+    
+    # Validation Pass 7: Summary statistics
+    total_errors = (
+        len(invalid_families) + len(invalid_majors) + len(invalid_leaves) +
+        downward_family_errors + downward_major_errors +
+        upward_major_errors + upward_leaf_major_errors + upward_leaf_family_errors
+    )
+    
+    if total_errors == 0:
+        logger.debug(
+            f"S-CP projection validation: PASSED - All hierarchical consistency checks passed. "
+            f"Sets: family={len(family_set)}, major={len(major_set)}, leaf={len(leaf_set)}"
+        )
+    else:
+        logger.warning(
+            f"S-CP projection validation: FAILED - Found {total_errors} consistency errors: "
+            f"invalid_nodes={len(invalid_families) + len(invalid_majors) + len(invalid_leaves)}, "
+            f"downward_family={downward_family_errors}, downward_major={downward_major_errors}, "
+            f"upward_major={upward_major_errors}, upward_leaf_major={upward_leaf_major_errors}, "
+            f"upward_leaf_family={upward_leaf_family_errors}"
+        )
     
     return {
         "family": family_set,

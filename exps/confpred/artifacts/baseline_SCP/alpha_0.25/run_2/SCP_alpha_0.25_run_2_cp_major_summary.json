@@ -1,0 +1,47 @@
+{
+  "level": "major",
+  "alpha_SCP": 0.25,
+  "tau": 0.22222222222222224,
+  "m": 1000,
+  "calibration_info": {
+    "tau": 0.22222222222222224,
+    "coverage": 0.7500395007110128,
+    "target_coverage": 0.75,
+    "n_cal": 6329
+  },
+  "metrics": {
+    "coverage": 0.7263823064770932,
+    "set_size_mean": 1.7652448657187993,
+    "set_size_median": 2.0,
+    "empty_rate": 0.0,
+    "singleton_rate": 0.46303317535545024,
+    "base_top1_acc": 0.8169036334913112,
+    "top1_acc_non_empty": 0.7069510268562401
+  },
+  "num_test_defined": 6330,
+  "num_test_used": 6330,
+  "class_labels": [
+    "maj:Android_10",
+    "maj:Android_4",
+    "maj:Android_5",
+    "maj:Android_6",
+    "maj:Android_7",
+    "maj:Android_8",
+    "maj:Android_9",
+    "maj:Android_OTHER",
+    "maj:Linux_OTHER",
+    "maj:Linux_Ubuntu",
+    "maj:Windows_10",
+    "maj:Windows_7",
+    "maj:Windows_8",
+    "maj:Windows_Vista",
+    "maj:Windows_XP",
+    "maj:iOS_10",
+    "maj:iOS_11",
+    "maj:iOS_12",
+    "maj:iOS_13",
+    "maj:iOS_14",
+    "maj:macOS_10",
+    "maj:macOS_OTHER"
+  ]
+}

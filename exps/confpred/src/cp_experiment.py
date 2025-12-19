@@ -35,6 +35,7 @@ from exps.confpred.src.scp_solver import (
     StructuredCPSolver,
     calibrate_scp,
     project_scp_to_levels,
+    diagnose_probability_shift,
 )
 
 
@@ -605,8 +606,9 @@ def run_baseline_b(
     y_test_leaf_global = y_test_leaf_global_aligned
     
     # Build leaf local mapping for B
-    leaf_g2l_B = {g: i for i, g in enumerate(leaf_vocab_global)}
-    test_leaf_seen_mask = np.array([g in leaf_g2l_B for g in y_test_leaf_global])
+    # Use integer keys to match the types in labels
+    leaf_g2l_B = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    test_leaf_seen_mask = np.array([int(g) in leaf_g2l_B for g in y_test_leaf_global])
     
     # Apply leaf closed-set filter
     probs_test_leaf_subset = probs_test_leaf[test_leaf_seen_mask]
@@ -632,8 +634,8 @@ def run_baseline_b(
     )
     
     # Map true labels to local indices aligned with A_* matrices
-    # Leaf level
-    y_leaf_local = np.array([leaf_g2l_B[g] for g in y_test_leaf_global_subset], dtype="int64")
+    # Leaf level - convert to int for dictionary lookup consistency
+    y_leaf_local = np.array([leaf_g2l_B[int(g)] for g in y_test_leaf_global_subset], dtype="int64")
     
     # Major level: filter to samples where major is in vocab
     maj_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in maj_g2l 
@@ -1061,11 +1063,27 @@ def run_baseline_scp(
     logger.info(
         f"S-CP input validation: "
         f"probs_cal_shape={probs_cal_leaf.shape}, "
+        f"probs_test_shape={probs_test_leaf.shape}, "
         f"leaf_vocab_size={len(leaf_vocab_global)}, "
         f"major_vocab_size={len(major_vocab_global)}, "
         f"family_vocab_size={len(family_vocab_global)}, "
         f"m={m_scp}"
     )
+    
+    # Diagnostic: Check for probability shift between Cal and Test
+    logger.info("Running probability shift diagnostic...")
+    try:
+        diagnose_probability_shift(
+            probs_cal=probs_cal_leaf,
+            y_cal_global=y_cal_leaf_global,
+            probs_test=probs_test_leaf,
+            y_test_global=y_test_leaf_global,
+            leaf_vocab_global=leaf_vocab_global,
+            logger=logger
+        )
+    except Exception as e:
+        logger.warning(f"Probability shift diagnostic failed with exception: {e}")
+        logger.warning("Continuing with calibration despite diagnostic failure...")
     
     # Create solver factory for calibration
     def solver_factory(leaf_probs):
@@ -1108,6 +1126,72 @@ def run_baseline_scp(
             "This may cause coverage issues."
         )
     
+    # ------------------------------------------------------------------
+    # S-CP alignment diagnostics (non-intrusive)
+    # ------------------------------------------------------------------
+    logger.info("Running S-CP alignment diagnostics on calibration data...")
+    try:
+        leaf_vocab_arr = np.asarray(leaf_vocab_global)
+        n_cal_samples = probs_cal_leaf.shape[0]
+        if n_cal_samples > 0 and leaf_vocab_arr.size > 0:
+            # Detailed check for sample 0 (mirrors the suggested debug snippet)
+            true_gid_0 = int(y_cal_leaf_global[0])
+            logger.info(f"S-CP DEBUG: sample 0 true leaf global ID: {true_gid_0}")
+            matches_0 = np.where(leaf_vocab_arr == true_gid_0)[0]
+            if matches_0.size == 0:
+                logger.warning(
+                    "S-CP DEBUG: sample 0 true leaf ID not found in leaf_vocab_global. "
+                    "This indicates a potential label/vocabulary mismatch."
+                )
+            else:
+                col_idx_0 = int(matches_0[0])
+                p_true_0 = float(probs_cal_leaf[0, col_idx_0])
+                p_max_0 = float(np.max(probs_cal_leaf[0]))
+                logger.info(
+                    "S-CP DEBUG: sample 0 alignment check -> "
+                    f"col_idx={col_idx_0}, p_true={p_true_0:.6f}, p_max_row={p_max_0:.6f}"
+                )
+
+            # Aggregate statistics over a prefix of the calibration set
+            max_n = min(100, n_cal_samples)
+            suspicious = 0
+            checked = 0
+            for i in range(max_n):
+                true_gid = int(y_cal_leaf_global[i])
+                matches = np.where(leaf_vocab_arr == true_gid)[0]
+                if matches.size == 0:
+                    # Skip samples whose label is not in vocab; these are already warned about above
+                    continue
+                col_idx = int(matches[0])
+                row_probs = probs_cal_leaf[i]
+                p_true = float(row_probs[col_idx])
+                p_max = float(np.max(row_probs))
+                checked += 1
+                if p_true < 0.05 and p_max > 0.5:
+                    suspicious += 1
+
+            if checked > 0:
+                frac = suspicious / float(checked)
+                logger.info(
+                    "S-CP DEBUG: among first "
+                    f"{checked} calibration samples with labels in vocab, "
+                    f"{suspicious} ({frac:.3f}) have p_true<0.05 and p_max>0.5."
+                )
+                if frac > 0.5:
+                    logger.warning(
+                        "S-CP DEBUG: A majority of calibration samples show low true-class "
+                        "probability while some other class has high probability. "
+                        "This strongly suggests a column–vocabulary misalignment in the "
+                        "leaf probability matrix. Please verify that the ordering of "
+                        "model outputs matches leaf_vocab_global / classes_."
+                    )
+        else:
+            logger.info(
+                "S-CP DEBUG: Skipping alignment diagnostics (no calibration samples or empty vocabulary)."
+            )
+    except Exception as e:
+        logger.warning(f"S-CP alignment diagnostics failed with exception: {e}")
+
     cal_start_time_SCP = time.time()
     tau_optimal, cal_info = calibrate_scp(
         solver_factory=solver_factory,
@@ -1182,6 +1266,12 @@ def run_baseline_scp(
     
     # Project S-CP sets to levels
     logger.info("Projecting S-CP sets to Family/Major/Minor levels...")
+    
+    # Build label mappings for better validation messages
+    idx2id_map_leaf = {v: k for k, v in maps["leaf_id2idx"].items()}
+    idx2id_map_major = {v: k for k, v in maps["major_id2idx"].items()}
+    idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
+    
     family_sets: Dict[int, Set[int]] = {}
     major_sets: Dict[int, Set[int]] = {}
     leaf_sets: Dict[int, Set[int]] = {}
@@ -1195,15 +1285,37 @@ def run_baseline_scp(
             leaf_to_major=leaf_to_major_global,
             major_to_family=major_to_family_global,
             leaf_to_family=leaf_to_family_global,
+            logger=logger,
+            idx2id_map_leaf=idx2id_map_leaf,
+            idx2id_map_major=idx2id_map_major,
+            idx2id_map_family=idx2id_map_family,
         )
         family_sets[sample_idx] = projected["family"]
         major_sets[sample_idx] = projected["major"]
         leaf_sets[sample_idx] = projected["leaf"]
     
+    # Log projection summary statistics
+    if scp_sets_global:
+        avg_family_size = np.mean([len(family_sets.get(sid, set())) for sid in scp_sets_global.keys()])
+        avg_major_size = np.mean([len(major_sets.get(sid, set())) for sid in scp_sets_global.keys()])
+        avg_leaf_size = np.mean([len(leaf_sets.get(sid, set())) for sid in scp_sets_global.keys()])
+        empty_family_count = sum(1 for sid in scp_sets_global.keys() if len(family_sets.get(sid, set())) == 0)
+        empty_major_count = sum(1 for sid in scp_sets_global.keys() if len(major_sets.get(sid, set())) == 0)
+        empty_leaf_count = sum(1 for sid in scp_sets_global.keys() if len(leaf_sets.get(sid, set())) == 0)
+        
+        logger.info(
+            f"S-CP projection summary: "
+            f"avg_set_sizes: family={avg_family_size:.2f}, major={avg_major_size:.2f}, leaf={avg_leaf_size:.2f}, "
+            f"empty_sets: family={empty_family_count}/{len(scp_sets_global)}, "
+            f"major={empty_major_count}/{len(scp_sets_global)}, "
+            f"leaf={empty_leaf_count}/{len(scp_sets_global)}"
+        )
+    
     # Build local mappings for evaluation
-    leaf_g2l = {g: i for i, g in enumerate(leaf_vocab_global)}
-    major_g2l = {g: i for i, g in enumerate(major_vocab_global)}
-    family_g2l = {g: i for i, g in enumerate(family_vocab_global)}
+    # Use integer keys to match the types in projected sets
+    leaf_g2l = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    major_g2l = {int(g): i for i, g in enumerate(major_vocab_global)}
+    family_g2l = {int(g): i for i, g in enumerate(family_vocab_global)}
     
     # Convert sets to boolean masks for evaluation
     n_leaves = len(leaf_vocab_global)
@@ -1215,23 +1327,27 @@ def run_baseline_scp(
     keep_family_bool = np.zeros((n_test, n_families), dtype=bool)
     
     for i, sample_idx in enumerate(idx_test_leaf_seen):
-        # Leaf level
+        # Leaf level - ensure integer type for dictionary lookup
         for leaf_gid in leaf_sets.get(int(sample_idx), set()):
-            if leaf_gid in leaf_g2l:
-                keep_leaf_bool[i, leaf_g2l[leaf_gid]] = True
+            leaf_gid_int = int(leaf_gid)
+            if leaf_gid_int in leaf_g2l:
+                keep_leaf_bool[i, leaf_g2l[leaf_gid_int]] = True
         
-        # Major level
+        # Major level - ensure integer type for dictionary lookup
         for major_gid in major_sets.get(int(sample_idx), set()):
-            if major_gid in major_g2l:
-                keep_major_bool[i, major_g2l[major_gid]] = True
+            major_gid_int = int(major_gid)
+            if major_gid_int in major_g2l:
+                keep_major_bool[i, major_g2l[major_gid_int]] = True
         
-        # Family level
+        # Family level - ensure integer type for dictionary lookup
         for family_gid in family_sets.get(int(sample_idx), set()):
-            if family_gid in family_g2l:
-                keep_family_bool[i, family_g2l[family_gid]] = True
+            family_gid_int = int(family_gid)
+            if family_gid_int in family_g2l:
+                keep_family_bool[i, family_g2l[family_gid_int]] = True
     
     # Get true labels for evaluation
-    y_leaf_local = np.array([leaf_g2l[g] for g in y_test_leaf_global], dtype="int64")
+    # Convert to int for dictionary lookup consistency
+    y_leaf_local = np.array([leaf_g2l[int(g)] for g in y_test_leaf_global], dtype="int64")
     
     y_test_major_global = df.iloc[idx_test_leaf_seen]["major_idx"].astype("Int64").values
     maj_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in major_g2l 

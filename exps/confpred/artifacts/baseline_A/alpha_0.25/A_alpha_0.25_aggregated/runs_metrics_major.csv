@@ -1,0 +1,2 @@
+coverage,set_size_mean,set_size_median,empty_rate,singleton_rate,top1_acc_non_empty,base_top1_acc,hir,level,alpha,run
+0.7529225908372821,0.7895734597156391,1.0,0.21042654028436,0.7895734597156391,0.9535814325730291,0.8475513428120061,,major,0.25,1

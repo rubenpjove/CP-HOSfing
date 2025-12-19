@@ -39,21 +39,25 @@ def build_vocab_maps_for_B(
     m_family = len(family_vocab_global)
     
     # Build global idx -> local row index mappings
-    leaf_g2l = {g: i for i, g in enumerate(leaf_vocab_global)}
-    maj_g2l = {g: i for i, g in enumerate(major_vocab_global)}
-    fam_g2l = {g: i for i, g in enumerate(family_vocab_global)}
+    # Use integer keys for type consistency with dictionary lookups
+    leaf_g2l = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    maj_g2l = {int(g): i for i, g in enumerate(major_vocab_global)}
+    fam_g2l = {int(g): i for i, g in enumerate(family_vocab_global)}
     
     # Build A_major: for each leaf, find its major and set the corresponding entry
     major_rows = []
     major_cols = []
     
     for j, leaf_gid in enumerate(leaf_vocab_global):
-        # Get major for this leaf (if exists)
-        major_gid = leaf_to_major_global.get(leaf_gid, None)
+        leaf_gid_int = int(leaf_gid)
+        # Get major for this leaf (if exists) - ensure integer type
+        major_gid = leaf_to_major_global.get(leaf_gid_int, None)
         
-        if major_gid is not None and major_gid in maj_g2l:
+        if major_gid is not None:
+            major_gid_int = int(major_gid)
+            if major_gid_int in maj_g2l:
             # Leaf has a major and that major is in the vocab
-            i = maj_g2l[major_gid]
+                i = maj_g2l[major_gid_int]
             major_rows.append(i)
             major_cols.append(j)
         # If leaf has no major or major not in vocab, no entry added (ragged hierarchy)
@@ -67,17 +71,22 @@ def build_vocab_maps_for_B(
         # Fall back to leaf->major->family chain where major exists
         leaf_to_family_global = {}
         for leaf_gid in leaf_vocab_global:
-            major_gid = leaf_to_major_global.get(leaf_gid, None)
+            leaf_gid_int = int(leaf_gid)
+            major_gid = leaf_to_major_global.get(leaf_gid_int, None)
             if major_gid is not None:
-                family_gid = major_to_family_global.get(major_gid, None)
+                major_gid_int = int(major_gid)
+                family_gid = major_to_family_global.get(major_gid_int, None)
                 if family_gid is not None:
-                    leaf_to_family_global[leaf_gid] = family_gid
+                    leaf_to_family_global[leaf_gid_int] = int(family_gid)
     
     for j, leaf_gid in enumerate(leaf_vocab_global):
-        family_gid = leaf_to_family_global.get(leaf_gid, None)
+        leaf_gid_int = int(leaf_gid)
+        family_gid = leaf_to_family_global.get(leaf_gid_int, None)
         
-        if family_gid is not None and family_gid in fam_g2l:
-            i = fam_g2l[family_gid]
+        if family_gid is not None:
+            family_gid_int = int(family_gid)
+            if family_gid_int in fam_g2l:
+                i = fam_g2l[family_gid_int]
             family_rows.append(i)
             family_cols.append(j)
         # If leaf has no family or family not in vocab, no entry added

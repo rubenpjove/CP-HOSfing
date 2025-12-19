@@ -1,0 +1,31 @@
+{
+  "level": "family",
+  "alpha_SCP": 0.25,
+  "tau": 0.22222222222222224,
+  "m": 1000,
+  "calibration_info": {
+    "tau": 0.22222222222222224,
+    "coverage": 0.7500395007110128,
+    "target_coverage": 0.75,
+    "n_cal": 6329
+  },
+  "metrics": {
+    "coverage": 0.7709320695102686,
+    "set_size_mean": 1.4932069510268562,
+    "set_size_median": 1.0,
+    "empty_rate": 0.0,
+    "singleton_rate": 0.5067930489731438,
+    "base_top1_acc": 0.9428120063191153,
+    "top1_acc_non_empty": 0.7696682464454976,
+    "hir": 0.0
+  },
+  "num_test_defined": 6330,
+  "num_test_used": 6330,
+  "class_labels": [
+    "fam:Android",
+    "fam:Linux",
+    "fam:Windows",
+    "fam:iOS",
+    "fam:macOS"
+  ]
+}
