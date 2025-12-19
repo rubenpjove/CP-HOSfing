@@ -11,10 +11,10 @@
   },
   "metrics": {
     "coverage": 0.9216429699842023,
-    "set_size_mean": 9.916271721958926,
+    "set_size_mean": 9.874881516587678,
     "set_size_median": 5.0,
     "empty_rate": 0.0,
-    "singleton_rate": 0.06003159557661927,
+    "singleton_rate": 0.06018957345971564,
     "base_top1_acc": 0.7278041074249605,
     "top1_acc_non_empty": 0.6981042654028436
   },

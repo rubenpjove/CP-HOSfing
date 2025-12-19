@@ -16,7 +16,7 @@
     "empty_rate": 0.0,
     "singleton_rate": 0.4890995260663507,
     "base_top1_acc": 0.944391785150079,
-    "top1_acc_non_empty": 0.7851500789889415,
+    "top1_acc_non_empty": 0.7843601895734598,
     "hir": 0.0
   },
   "num_test_defined": 6330,

@@ -10,8 +10,8 @@
     "n_cal": 6329
   },
   "metrics": {
-    "coverage": 0.765560821484992,
-    "set_size_mean": 4.649605055292259,
+    "coverage": 0.7654028436018957,
+    "set_size_mean": 4.6467614533965245,
     "set_size_median": 4.0,
     "empty_rate": 0.0,
     "singleton_rate": 0.13601895734597155,

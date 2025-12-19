@@ -687,14 +687,17 @@ def project_scp_to_levels(
     idx2id_map_leaf: Optional[Dict[int, str]] = None,
     idx2id_map_major: Optional[Dict[int, str]] = None,
     idx2id_map_family: Optional[Dict[int, str]] = None,
+    debug: bool = False,
 ) -> Dict[str, Set[int]]:
     """
     Project S-CP prediction set to Family, Major, and Minor level sets.
     
     For each node in scp_set:
-    1. Add self to its level set
-    2. Add all ancestors (upwards consistency)
-    3. Add all descendants (downwards implied coverage)
+    - If Family selected: Add self + all descendants (downward expansion)
+    - If Major selected: Add self + all descendants + parent family (upward consistency)
+    - If Leaf selected: Add self + parent nodes only (upward consistency, NO siblings/cousins)
+    
+    This preserves the specificity of precise predictions while maintaining hierarchical consistency.
     
     Args:
         scp_set: Set of global node indices from S-CP
@@ -708,6 +711,7 @@ def project_scp_to_levels(
         idx2id_map_leaf: Optional dict mapping global leaf idx -> class label string
         idx2id_map_major: Optional dict mapping global major idx -> class label string
         idx2id_map_family: Optional dict mapping global family idx -> class label string
+        debug: If True, log detailed projection results with class names before validations
         
     Returns:
         Dict with keys "family", "major", "leaf" mapping to sets of global indices
@@ -719,6 +723,11 @@ def project_scp_to_levels(
     family_set = set()
     major_set = set()
     leaf_set = set()
+    
+    # Track directly selected nodes (from scp_set) for validation purposes
+    # Only directly selected nodes should have full downward consistency
+    directly_selected_families = set()
+    directly_selected_majors = set()
     
     # Build reverse mappings for descendants
     major_to_leaves: Dict[int, Set[int]] = {}
@@ -831,32 +840,44 @@ def project_scp_to_levels(
         node_gid_int = int(node_gid)  # Ensure integer type
         # Determine node type
         if node_gid_int in family_vocab_set:
-            # Family node: add with full downward projection
+            # --- CASE A: FAMILY SELECTED (Vague) ---
+            # Action: Add Self + Downward Expansion
+            directly_selected_families.add(node_gid_int)
             add_family_with_descendants(node_gid_int)
             
         elif node_gid_int in major_vocab_set:
-            # Major node: add with full downward projection
+            # --- CASE B: MAJOR SELECTED (Intermediate) ---
+            # Action: Add Self + Downward Expansion + Upward Consistency
+            directly_selected_majors.add(node_gid_int)
             add_major_with_descendants(node_gid_int)
             
-            # Add ancestor (family) with full downward projection
+            # Upward: Add Parent Family (ONLY the parent node, not its other children)
             family_gid = major_to_family.get(node_gid_int)
             if family_gid is not None:
-                add_family_with_descendants(int(family_gid))
+                family_set.add(int(family_gid))
             
         elif node_gid_int in leaf_vocab_set:
-            # Leaf node: add to leaf_set
+            # --- CASE C: LEAF SELECTED (Precise) ---
+            # Action: Add Self + Upward Consistency (NO downward expansion)
             leaf_set.add(node_gid_int)
             
-            # Add ancestors with full downward projection
+            # Upward: Add Parent Major (ONLY the parent node, not its other children)
             major_gid = leaf_to_major.get(node_gid_int)
             if major_gid is not None:
-                add_major_with_descendants(int(major_gid))
+                major_gid_int = int(major_gid)
+                major_set.add(major_gid_int)
+                
+                # Upward from Major: Add Parent Family
+                family_gid = major_to_family.get(major_gid_int)
+                if family_gid is not None:
+                    family_set.add(int(family_gid))
             
+            # Upward: Add Parent Family (Direct check if major was missing)
             family_gid = leaf_to_family.get(node_gid_int)
             if family_gid is None and major_gid is not None:
-                family_gid = major_to_family.get(major_gid)
+                family_gid = major_to_family.get(int(major_gid))
             if family_gid is not None:
-                add_family_with_descendants(int(family_gid))
+                family_set.add(int(family_gid))
             
         else:
             # Node not found in any vocabulary - this shouldn't happen but log it
@@ -872,6 +893,48 @@ def project_scp_to_levels(
         f"major_set_size={len(major_set)}, "
         f"leaf_set_size={len(leaf_set)}"
     )
+    
+    # Debug logging: Show detailed projection results with class names
+    if debug:
+        def format_set_with_names(node_set: Set[int], mapping: Optional[Dict[int, str]], prefix: str = "") -> str:
+            """Format a set of node IDs with their class names."""
+            if not node_set:
+                return f"{prefix}()"
+            names = []
+            for node_id in sorted(node_set):
+                node_id_int = int(node_id)
+                name = mapping.get(node_id_int, str(node_id_int)) if mapping else str(node_id_int)
+                names.append(name)
+            return f"{prefix}({', '.join(names)})"
+        
+        # Format S-CP predicted set
+        scp_predicted = []
+        for node_gid in sorted(scp_set):
+            node_gid_int = int(node_gid)
+            if node_gid_int in family_vocab_set:
+                name = idx2id_map_family.get(node_gid_int, str(node_gid_int)) if idx2id_map_family else str(node_gid_int)
+                scp_predicted.append(name)
+            elif node_gid_int in major_vocab_set:
+                name = idx2id_map_major.get(node_gid_int, str(node_gid_int)) if idx2id_map_major else str(node_gid_int)
+                scp_predicted.append(name)
+            elif node_gid_int in leaf_vocab_set:
+                name = idx2id_map_leaf.get(node_gid_int, str(node_gid_int)) if idx2id_map_leaf else str(node_gid_int)
+                scp_predicted.append(name)
+            else:
+                scp_predicted.append(str(node_gid_int))
+        
+        scp_predicted_str = f"({', '.join(scp_predicted)})" if scp_predicted else "()"
+        family_str = format_set_with_names(family_set, idx2id_map_family, "family")
+        major_str = format_set_with_names(major_set, idx2id_map_major, "major")
+        leaf_str = format_set_with_names(leaf_set, idx2id_map_leaf, "leaf")
+        
+        logger.info(
+            f"S-CP projection debug: "
+            f"predicted={scp_predicted_str}, "
+            f"{family_str}, "
+            f"{major_str}, "
+            f"{leaf_str}"
+        )
     
     # ===================================================================
     # COMPREHENSIVE VALIDATION PASSES
@@ -898,38 +961,41 @@ def project_scp_to_levels(
             f"not in vocabulary: {list(invalid_leaves)[:5]}{'...' if len(invalid_leaves) > 5 else ''}"
         )
     
-    # Validation Pass 2: Downward consistency - If a family is in the set, all its majors should be in major_set
+    # Validation Pass 2: Downward consistency - If a family is DIRECTLY SELECTED, all its majors should be in major_set
+    # Note: Families added as parents (via upward consistency) don't need all majors
     downward_family_errors = 0
-    for fam_gid in family_set:
-        if fam_gid in family_to_majors:
+    for fam_gid in directly_selected_families:
+        fam_gid_int = int(fam_gid)
+        if fam_gid_int in family_to_majors:
             # Only check majors that are in the vocabulary
-            expected_majors = {int(m) for m in family_to_majors[fam_gid] if int(m) in major_vocab_set}
+            expected_majors = {int(m) for m in family_to_majors[fam_gid_int] if int(m) in major_vocab_set}
             # Ensure major_set contains integers for comparison
             major_set_ints = {int(m) for m in major_set}
             missing_majors = expected_majors - major_set_ints
             if missing_majors:
                 # Convert to labels for better readability
-                fam_label = _get_label(fam_gid, idx2id_map_family)
+                fam_label = _get_label(fam_gid_int, idx2id_map_family)
                 missing_labels = [_get_label(m, idx2id_map_major) for m in list(missing_majors)[:5]]
                 missing_str = ", ".join(missing_labels)
                 if len(missing_majors) > 5:
                     missing_str += "..."
                 
                 logger.warning(
-                    f"S-CP projection validation: Family {fam_label} (ID: {fam_gid}) is in family_set, "
+                    f"S-CP projection validation: Family {fam_label} (ID: {fam_gid_int}) is directly selected, "
                     f"but {len(missing_majors)} of its majors are missing from major_set: {missing_str}"
                 )
                 logger.debug(
-                    f"S-CP projection validation debug: Family {fam_label} (ID: {fam_gid}), "
+                    f"S-CP projection validation debug: Family {fam_label} (ID: {fam_gid_int}), "
                     f"expected_majors={len(expected_majors)}, "
                     f"major_set_size={len(major_set_ints)}, "
                     f"missing={len(missing_majors)}"
                 )
                 downward_family_errors += 1
     
-    # Validation Pass 3: Downward consistency - If a major is in the set, all its leaves should be in leaf_set
+    # Validation Pass 3: Downward consistency - If a major is DIRECTLY SELECTED, all its leaves should be in leaf_set
+    # Note: Majors added as parents (via upward consistency) don't need all leaves
     downward_major_errors = 0
-    for maj_gid in major_set:
+    for maj_gid in directly_selected_majors:
         maj_gid_int = int(maj_gid)
         if maj_gid_int in major_to_leaves:
             # Only check leaves that are in the vocabulary
@@ -946,7 +1012,7 @@ def project_scp_to_levels(
                     missing_str += "..."
                 
                 logger.warning(
-                    f"S-CP projection validation: Major {maj_label} (ID: {maj_gid_int}) is in major_set, "
+                    f"S-CP projection validation: Major {maj_label} (ID: {maj_gid_int}) is directly selected, "
                     f"but {len(missing_leaves)} of its leaves are missing from leaf_set: {missing_str}"
                 )
                 logger.debug(

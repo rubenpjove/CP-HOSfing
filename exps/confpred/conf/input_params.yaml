@@ -18,12 +18,13 @@ split_proportions:
   test: 0.5
 
 # S-CP
-scp_m: 5  # Maximum number of nodes in prediction set (default: 4)
+scp_m: 1000  # Maximum number of nodes in prediction set (default: 4)
 scp_use_fallback: false  # If true, return all families on solver failure (pragmatic). If false, return empty set (rigorous).
+debug_scp_projection: true
 
 # DEBUGGING
 # FALSE
-num_runs: 4
+num_runs: 1
 alphas: [0.02, 0.05, 0.10, 0.15, 0.20, 0.25]
 # num_runs: 1
 # alphas: [0.05, 0.25]

@@ -10,13 +10,13 @@
     "n_cal": 6329
   },
   "metrics": {
-    "coverage": 0.9589257503949447,
-    "set_size_mean": 24.067614533965244,
-    "set_size_median": 25.0,
+    "coverage": 0.8725118483412322,
+    "set_size_mean": 7.23001579778831,
+    "set_size_median": 4.0,
     "empty_rate": 0.0,
-    "singleton_rate": 0.0,
+    "singleton_rate": 0.07551342812006319,
     "base_top1_acc": 0.7278041074249605,
-    "top1_acc_non_empty": 0.7121642969984202
+    "top1_acc_non_empty": 0.6946287519747235
   },
   "num_test_defined": 6330,
   "num_test_used": 6330,

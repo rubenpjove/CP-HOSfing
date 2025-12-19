@@ -11,7 +11,7 @@
   },
   "metrics": {
     "coverage": 0.9248025276461296,
-    "set_size_mean": 4.420695102685624,
+    "set_size_mean": 4.417219589257504,
     "set_size_median": 2.0,
     "empty_rate": 0.0,
     "singleton_rate": 0.10837282780410742,

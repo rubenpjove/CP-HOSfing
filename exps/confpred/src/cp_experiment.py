@@ -1272,6 +1272,9 @@ def run_baseline_scp(
     idx2id_map_major = {v: k for k, v in maps["major_id2idx"].items()}
     idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
     
+    # Check if debug logging is enabled
+    debug_scp_projection = bool(input_params.get("debug_scp_projection", False))
+    
     family_sets: Dict[int, Set[int]] = {}
     major_sets: Dict[int, Set[int]] = {}
     leaf_sets: Dict[int, Set[int]] = {}
@@ -1289,6 +1292,7 @@ def run_baseline_scp(
             idx2id_map_leaf=idx2id_map_leaf,
             idx2id_map_major=idx2id_map_major,
             idx2id_map_family=idx2id_map_family,
+            debug=debug_scp_projection,
         )
         family_sets[sample_idx] = projected["family"]
         major_sets[sample_idx] = projected["major"]
