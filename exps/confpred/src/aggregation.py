@@ -60,9 +60,10 @@ def aggregate_per_alpha(
     # Destination aggregation location for this baseline/alpha (always in output_dir)
     baseline_dir = os.path.join(out_dir, f"baseline_{baseline}")
     os.makedirs(baseline_dir, exist_ok=True)
-    alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha}")
+    # Use alpha_float for consistent directory naming (0 -> 0.0, not "0")
+    alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}")
     os.makedirs(alpha_dir, exist_ok=True)
-    alpha_agg_dir = os.path.join(alpha_dir, f"{baseline}_alpha_{alpha}_aggregated")
+    alpha_agg_dir = os.path.join(alpha_dir, f"{baseline}_alpha_{alpha_float}_aggregated")
     os.makedirs(alpha_agg_dir, exist_ok=True)
 
     for level in levels:
@@ -196,7 +197,9 @@ def aggregate_cross_alpha(
     baseline_dir = os.path.join(out_dir, f"baseline_{baseline}")
     cross_rows = []
     for alpha in alphas:
-        alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha}", f"{baseline}_alpha_{alpha}_aggregated")
+        # Convert to float for consistent directory naming
+        alpha_float = float(alpha)
+        alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}", f"{baseline}_alpha_{alpha_float}_aggregated")
         for level in levels:
             agg_path = os.path.join(alpha_dir, f"aggregated_results_{level}.csv")
             if os.path.exists(agg_path):

@@ -99,7 +99,14 @@ def setup_logging(
         level_token = "warn" if level_name == "WARNING" else str(level_name).lower()
         log_file = Path(log_dir) / f"{level_token}.log"
 
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        # Create file immediately to ensure it exists right away
+        # This ensures the file is visible immediately and timestamps are accurate
+        log_file_path = str(log_file)
+        # Touch the file to create it immediately (before handler opens it)
+        log_file.touch(exist_ok=True)
+        # Use delay=False to open file immediately (not on first write)
+        # This ensures the file exists and is ready for logging from the start
+        file_handler = logging.FileHandler(log_file_path, encoding="utf-8", delay=False)
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
     

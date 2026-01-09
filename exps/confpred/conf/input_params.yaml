@@ -10,7 +10,8 @@ num_workers: 4             # Number of data loading workers (0 for CPU, 4+ for G
 use_multi_gpu: true        # Enable multi-GPU training with DataParallel
 
 # Experiment selection
-baselines: ["A", "B", "S-CP"]
+# baselines: ["A", "B", "S-CP"]
+baselines: ["A", "B"]
 
 # Split proportions for Cal/Test (70% already used for Train)
 split_proportions:
@@ -18,14 +19,14 @@ split_proportions:
   test: 0.5
 
 # S-CP
-scp_m: 1000  # Maximum number of nodes in prediction set (default: 4)
-scp_use_fallback: false  # If true, return all families on solver failure (pragmatic). If false, return empty set (rigorous).
-debug_scp_projection: true
+# scp_m: 1000  # Maximum number of nodes in prediction set (default: 4)
+# scp_use_fallback: false  # If true, return all families on solver failure (pragmatic). If false, return empty set (rigorous).
+# debug_scp_projection: true
 
 # DEBUGGING
 # FALSE
-num_runs: 1
-alphas: [0.02, 0.05, 0.10, 0.15, 0.20, 0.25]
+num_runs: 50
+alphas: [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.5]
 # num_runs: 1
 # alphas: [0.05, 0.25]
 # alphas: [0.05, 0.20]

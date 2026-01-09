@@ -78,6 +78,10 @@ def main():
     logger = setup_logging(level=logging.INFO, to_file=True, log_dir=out_dir, to_console=False)
     # Reconfigure to write all logs into a single file named after the logging level
     setup_single_file_logger(logger, out_dir)
+    # Flush all handlers to ensure file is created and first message is written immediately
+    for handler in logger.handlers:
+        if hasattr(handler, 'flush'):
+            handler.flush()
     logger.info(f"Loading configuration from: {resolved_path}")
 
     # Seed from params (fallback to 42)
@@ -191,7 +195,9 @@ def main():
     for alpha in alphas:
         baseline_exec_dir = os.path.join(out_dir, f"baseline_{baseline}")
         os.makedirs(baseline_exec_dir, exist_ok=True)
-        alpha_dir_exec = os.path.join(baseline_exec_dir, f"alpha_{alpha}")
+        # Convert to float for consistent directory naming (0 -> 0.0, not "0")
+        alpha_float = float(alpha)
+        alpha_dir_exec = os.path.join(baseline_exec_dir, f"alpha_{alpha_float}")
         os.makedirs(alpha_dir_exec, exist_ok=True)
 
         # Run multiple times per alpha
@@ -202,7 +208,7 @@ def main():
 
             # Build run-specific params
             input_params_run = dict(input_params)
-            input_params_run["alpha"] = float(alpha)
+            input_params_run["alpha"] = alpha_float
             input_params_run["seed"] = int(seed + run_idx)
 
             if baseline == "A":
@@ -211,13 +217,13 @@ def main():
                 if "B" in baselines_to_aggregate:
                     baseline_B_exec_dir = os.path.join(out_dir, f"baseline_B")
                     os.makedirs(baseline_B_exec_dir, exist_ok=True)
-                    alpha_dir_B_exec = os.path.join(baseline_B_exec_dir, f"alpha_{float(alpha)}")
+                    alpha_dir_B_exec = os.path.join(baseline_B_exec_dir, f"alpha_{alpha_float}")
                     os.makedirs(alpha_dir_B_exec, exist_ok=True)
                     out_dir_B = os.path.join(alpha_dir_B_exec, f"run_{run_idx}")
                     os.makedirs(out_dir_B, exist_ok=True)
                     
                     # Validate that out_dir_B structure matches expected aggregation paths
-                    expected_base = os.path.join(out_dir, f"baseline_B", f"alpha_{float(alpha)}")
+                    expected_base = os.path.join(out_dir, f"baseline_B", f"alpha_{alpha_float}")
                     if not out_dir_B.startswith(expected_base):
                         logger.warning(
                             f"out_dir_B structure may not match aggregation expectations: "
@@ -252,7 +258,7 @@ def main():
 
             # Split and rename artifacts into baseline-specific trees with full-trace filenames
             split_and_rename_artifacts(
-                run_dir, out_dir, float(alpha), run_idx, baseline, baselines_to_aggregate, logger
+                run_dir, out_dir, alpha_float, run_idx, baseline, baselines_to_aggregate, logger
             )
 
     # Aggregations and plots per baseline
@@ -265,11 +271,13 @@ def main():
 
         # Per-alpha aggregation for this baseline
         for alpha in alphas:
+            # Convert to float for consistent directory naming
+            alpha_float = float(alpha)
             # Aggregate per alpha
             aggregate_per_alpha(
                 out_dir=out_dir,
                 baseline=bl,
-                alpha=alpha,
+                alpha=alpha_float,
                 num_runs=num_runs,
                 levels=levels,
                 metric_keys=metric_keys,
@@ -277,8 +285,8 @@ def main():
             )
             
             # Per-alpha plotting (boxplots) for this baseline
-            alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha}")
-            alpha_agg_dir = os.path.join(alpha_dir, f"{bl}_alpha_{alpha}_aggregated")
+            alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}")
+            alpha_agg_dir = os.path.join(alpha_dir, f"{bl}_alpha_{alpha_float}_aggregated")
             if os.path.exists(alpha_agg_dir):
                 try:
                     plot_alpha_boxplots(alpha_dir=alpha_agg_dir)

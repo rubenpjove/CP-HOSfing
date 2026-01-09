@@ -5,7 +5,7 @@ import glob
 import re
 import argparse
 import shutil
-from typing import List, Set
+from typing import List, Set, Tuple, Dict
 
 from exps.utils.io_utils import setup_logging
 from exps.confpred.src.aggregation import (
@@ -22,7 +22,7 @@ from exps.confpred.src.plotting import (
 )
 
 
-def discover_baselines_and_alphas(out_dir: str) -> tuple[List[str], dict[str, List[float]]]:
+def discover_baselines_and_alphas(out_dir: str) -> Tuple[List[str], Dict[str, List[float]]]:
     """Discover baselines and alphas from directory structure.
     
     Args:

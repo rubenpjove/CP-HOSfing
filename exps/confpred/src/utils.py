@@ -2,6 +2,7 @@
 import os
 import logging
 import shutil
+from pathlib import Path
 from typing import Dict, Tuple
 import pandas as pd
 import numpy as np
@@ -98,7 +99,14 @@ def setup_single_file_logger(logger: logging.Logger, out_dir: str) -> None:
         }
         current_level_name = level_to_name.get(logger.level, "info")
         level_log_path = os.path.join(out_dir, f"{current_level_name}.log")
-        file_handler = logging.FileHandler(level_log_path, encoding="utf-8")
+        
+        # Create file immediately to ensure it exists right away
+        os.makedirs(out_dir, exist_ok=True)
+        Path(level_log_path).touch(exist_ok=True)
+        
+        # Use delay=False to open file immediately (not on first write)
+        # This ensures the file exists and timestamps are accurate from the start
+        file_handler = logging.FileHandler(level_log_path, encoding="utf-8", delay=False)
         # Mirror formatter used by setup_logging (human-readable UTC)
         import datetime as dt
         from datetime import timezone as tz
@@ -107,6 +115,9 @@ def setup_single_file_logger(logger: logging.Logger, out_dir: str) -> None:
         file_handler.setFormatter(formatter)
         file_handler.setLevel(logger.level)
         logger.addHandler(file_handler)
+        
+        # Flush immediately to ensure file is written and visible
+        file_handler.flush()
     except Exception as e:
         logger.warning(f"Failed to setup single file logger: {e}")
 

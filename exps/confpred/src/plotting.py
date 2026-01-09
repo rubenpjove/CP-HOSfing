@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter
 from typing import Dict, List
 
 
@@ -19,6 +20,28 @@ METRIC_KEYS = [
     "hir",
 ]
 LEVELS = ["family", "major", "leaf"]
+
+
+def format_metric_name(metric: str) -> str:
+    """Format metric name for display in plots (remove underscores, capitalize properly).
+    
+    Args:
+        metric: Raw metric name (e.g., "singleton_rate", "hir")
+        
+    Returns:
+        Formatted metric name (e.g., "Singleton Rate", "HIR")
+    """
+    metric_format_map = {
+        "singleton_rate": "Singleton Rate",
+        "empty_rate": "Empty Set Rate",
+        "set_size_mean": "Mean Set Size",
+        "set_size_median": "Median Set Size",
+        "hir": "HIR",
+        "coverage": "Coverage",
+        "top1_acc_non_empty": "Top-1 Accuracy (Non-Empty)",
+        "base_top1_acc": "Base Top-1 Accuracy",
+    }
+    return metric_format_map.get(metric, metric.replace("_", " ").title())
 
 
 def _ensure_dir(path: str):
@@ -49,8 +72,9 @@ def plot_alpha_boxplots(alpha_dir: str):
             fig, ax = plt.subplots(figsize=(6, 4))
             # Boxplot of per-run values
             ax.boxplot([df[metric].dropna().values], labels=[level])
-            ax.set_title(f"{metric} — {level}")
-            ax.set_ylabel(metric)
+            formatted_metric = format_metric_name(metric)
+            ax.set_title(f"{formatted_metric} — {level}")
+            ax.set_ylabel(formatted_metric)
             ax.grid(True, linestyle=":", alpha=0.6)
             png_path = os.path.join(plots_dir, f"{metric}_{level}_boxplot.png")
             svg_path = os.path.join(plots_dir, f"{metric}_{level}_boxplot.svg")
@@ -97,9 +121,25 @@ def plot_aggregate_lines(out_dir: str, cross_alpha_csv: str):
                     y1 = y - s
                     y2 = y + s
                     ax.fill_between(x, y1, y2, alpha=0.15)
-            ax.set_title(f"{metric} vs alpha (mean±std)")
+            formatted_metric = format_metric_name(metric)
+            ax.set_title(formatted_metric)
             ax.set_xlabel("alpha")
-            ax.set_ylabel(metric)
+            ax.set_ylabel(formatted_metric)
+            # Use logarithmic scale for set_size_mean to handle large values at alpha=0
+            if metric == "set_size_mean":
+                ax.set_yscale('symlog', linthresh=1.0)  # Symmetric log scale handles both small and large values
+                # Use ScalarFormatter to display regular numbers instead of base-10 notation
+                ax.yaxis.set_major_formatter(ScalarFormatter())
+                # Set custom y-axis ticks: fine granularity in 0-5 range, good coverage of upper range
+                ax.set_yticks([0, 0.5, 1, 2, 5, 10, 20, 50])
+                # Set y-axis to start at 0.5 instead of 0.0
+                ax.set_ylim(bottom=0.5)
+            # Add reference line for coverage plots
+            if metric == "coverage":
+                ref_x = np.array(alphas_sorted)
+                ref_y = 1 - ref_x
+                ax.plot(ref_x, ref_y, color='black', linestyle='-', linewidth=0.8, 
+                       label='1-α', alpha=0.7)
             ax.grid(True, linestyle=":", alpha=0.6)
             ax.legend(title="level")
             png_path = os.path.join(plots_dir, f"{metric}_mean_std_by_level.png")
@@ -139,6 +179,10 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
         """Format baseline name for display."""
         if baseline == "SCP":
             return "S-CP"
+        elif baseline == "A":
+            return "L-CP"
+        elif baseline == "B":
+            return "BU-CP"
         return f"Baseline {baseline}"
     
     for metric in METRIC_KEYS:
@@ -171,9 +215,18 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
             if not plotted_any:
                 plt.close()
                 continue
+            # Add reference line for coverage plots
+            if metric == "coverage":
+                alphas_for_ref = sorted(df_combined[df_combined["metric"] == metric]["alpha"].unique())
+                if len(alphas_for_ref) > 0:
+                    ref_x = np.array(alphas_for_ref)
+                    ref_y = 1 - ref_x
+                    plt.plot(ref_x, ref_y, color='black', linestyle='-', linewidth=0.8, 
+                            label='1-α', alpha=0.7)
+            formatted_metric = format_metric_name(metric)
             plt.xlabel("alpha")
-            plt.ylabel(metric)
-            plt.title(f"{metric} across alphas (mean±std) — baselines")
+            plt.ylabel(formatted_metric)
+            plt.title(formatted_metric)
             plt.legend(ncol=1)
             plt.grid(True, linestyle=":", linewidth=0.5)
             base_name = f"AB_{metric}_mean_std_across_levels"
@@ -183,7 +236,7 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
             plt.close()
             continue
 
-        # Default: per-level lines with per-baseline styles
+        # Default: per-level lines with per-baseline styles (same for all metrics including coverage)
         for bl in baselines_present:
             color = baseline_color_map.get(bl, "#1f77b4")
             for level in LEVELS:
@@ -206,13 +259,36 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
                 upper = np.where(np.isfinite(stds), means + stds, np.nan)
                 plt.fill_between(alphas, lower, upper, alpha=0.15, color=color)
                 plotted_any = True
+        
+        # Add reference line for coverage plots (but don't include it in legend)
+        if metric == "coverage":
+            alphas_for_ref = sorted(df_combined[df_combined["metric"] == metric]["alpha"].unique())
+            if len(alphas_for_ref) > 0:
+                ref_x = np.array(alphas_for_ref)
+                ref_y = 1 - ref_x
+                plt.plot(ref_x, ref_y, color='black', linestyle='-', linewidth=0.8, 
+                        label=None, alpha=0.7)  # label=None to exclude from legend
+        
         if not plotted_any:
             plt.close()
             continue
+        
+        formatted_metric = format_metric_name(metric)
         plt.xlabel("alpha")
-        plt.ylabel(metric)
-        plt.title(f"{metric} across alphas (mean±std) — levels vs baselines")
+        plt.ylabel(formatted_metric)
+        # Use logarithmic scale for set_size_mean to handle large values at alpha=0
+        if metric == "set_size_mean":
+            plt.yscale('symlog', linthresh=1.0)  # Symmetric log scale handles both small and large values
+            # Use ScalarFormatter to display regular numbers instead of base-10 notation
+            plt.gca().yaxis.set_major_formatter(ScalarFormatter())
+            # Set custom y-axis ticks: fine granularity in 0-5 range, good coverage of upper range
+            plt.yticks([0, 0.5, 1, 2, 5, 10, 20, 50])
+            # Set y-axis to start at 0.5 instead of 0.0
+            plt.ylim(bottom=0.5)
+        plt.title(formatted_metric)
+        # Use same legend format for all metrics (including coverage, but excluding HIR which has special handling)
         plt.legend(ncol=2)
+        
         plt.grid(True, linestyle=":", linewidth=0.5)
         base_name = f"AB_{metric}_mean_std_across_levels"
         plt.tight_layout()
