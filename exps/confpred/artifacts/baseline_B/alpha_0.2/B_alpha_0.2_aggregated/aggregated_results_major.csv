@@ -1,2 +1,0 @@
-coverage_mean,coverage_std,set_size_mean_mean,set_size_mean_std,set_size_median_mean,set_size_median_std,empty_rate_mean,empty_rate_std,singleton_rate_mean,singleton_rate_std,top1_acc_non_empty_mean,top1_acc_non_empty_std,base_top1_acc_mean,base_top1_acc_std,hir_mean,hir_std
-0.8604802527646125,0.005037363021584719,1.1013270142180092,0.009309404129306791,1.0,0.0,0.02398736176935184,0.0038006412362795385,0.8525023696682461,0.0029402236744711825,0.83673155304195,0.002042732328251658,0.8220663507109002,0.0028951562088116727,,

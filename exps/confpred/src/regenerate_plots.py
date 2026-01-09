@@ -22,27 +22,27 @@ from exps.confpred.src.plotting import (
 )
 
 
-def discover_baselines_and_alphas(out_dir: str) -> Tuple[List[str], Dict[str, List[float]]]:
-    """Discover baselines and alphas from directory structure.
+def discover_methods_and_alphas(out_dir: str) -> Tuple[List[str], Dict[str, List[float]]]:
+    """Discover methods and alphas from directory structure.
     
     Args:
         out_dir: Root output directory
         
     Returns:
-        Tuple of (list of baseline names, dict mapping baseline to list of alpha values)
+        Tuple of (list of method names, dict mapping method to list of alpha values)
     """
-    baselines = []
-    baseline_alphas = {}
+    methods = []
+    method_alphas = {}
     
-    # Look for baseline_A, baseline_B directories
-    for baseline_dir in glob.glob(os.path.join(out_dir, "baseline_*")):
-        baseline_name = os.path.basename(baseline_dir).replace("baseline_", "")
-        if baseline_name in ["A", "B", "S-CP"]:
-            baselines.append(baseline_name)
+    # Look for method_LwCP, method_LoUPCP directories
+    for method_dir in glob.glob(os.path.join(out_dir, "method_*")):
+        method_name = os.path.basename(method_dir).replace("method_", "")
+        if method_name in ["LwCP", "LoUPCP"]:
+            methods.append(method_name)
             
-            # Discover alphas in this baseline directory
+            # Discover alphas in this method directory
             alphas = []
-            for alpha_dir in glob.glob(os.path.join(baseline_dir, "alpha_*")):
+            for alpha_dir in glob.glob(os.path.join(method_dir, "alpha_*")):
                 alpha_name = os.path.basename(alpha_dir).replace("alpha_", "")
                 # Skip aggregated directories
                 if "aggregated" in alpha_name:
@@ -60,17 +60,17 @@ def discover_baselines_and_alphas(out_dir: str) -> Tuple[List[str], Dict[str, Li
             
             # Remove duplicates and sort
             alphas = sorted(list(set(alphas)))
-            baseline_alphas[baseline_name] = alphas
+            method_alphas[method_name] = alphas
     
-    return sorted(baselines), baseline_alphas
+    return sorted(methods), method_alphas
 
 
-def discover_num_runs(out_dir: str, baseline: str, alpha: float) -> int:
-    """Discover the number of runs for a given baseline/alpha by counting run directories.
+def discover_num_runs(out_dir: str, method: str, alpha: float) -> int:
+    """Discover the number of runs for a given method/alpha by counting run directories.
     
     Args:
         out_dir: Root output directory
-        baseline: Baseline name
+        method: Method name
         alpha: Alpha value
         
     Returns:
@@ -80,12 +80,12 @@ def discover_num_runs(out_dir: str, baseline: str, alpha: float) -> int:
     alpha_dir_variants = []
     if alpha == 0.0:
         alpha_dir_variants = [
-            os.path.join(out_dir, f"baseline_{baseline}", "alpha_0"),
-            os.path.join(out_dir, f"baseline_{baseline}", "alpha_0.0")
+            os.path.join(out_dir, f"method_{method}", "alpha_0"),
+            os.path.join(out_dir, f"method_{method}", "alpha_0.0")
         ]
     else:
         alpha_dir_variants = [
-            os.path.join(out_dir, f"baseline_{baseline}", f"alpha_{alpha}")
+            os.path.join(out_dir, f"method_{method}", f"alpha_{alpha}")
         ]
     
     max_run = 0
@@ -168,49 +168,49 @@ Examples:
     if args.debug:
         logger.debug("Debug logging enabled")
     
-    # Discover baselines and alphas from input directory structure
-    baselines, baseline_alphas = discover_baselines_and_alphas(input_dir)
+    # Discover methods and alphas from input directory structure
+    methods, method_alphas = discover_methods_and_alphas(input_dir)
     
-    if not baselines:
-        logger.warning("No baselines found in input directory. Nothing to regenerate.")
+    if not methods:
+        logger.warning("No methods found in input directory. Nothing to regenerate.")
         return
     
-    logger.info(f"Discovered baselines: {baselines}")
-    for bl, alphas in baseline_alphas.items():
-        logger.info(f"  Baseline {bl}: {len(alphas)} alphas found")
+    logger.info(f"Discovered methods: {methods}")
+    for m, alphas in method_alphas.items():
+        logger.info(f"  Method {m}: {len(alphas)} alphas found")
     
     # Constants
     levels = LEVELS
     metric_keys = METRIC_KEYS
     
-    # Per-baseline processing
-    for bl in baselines:
-        alphas = baseline_alphas.get(bl, [])
+    # Per-method processing
+    for m in methods:
+        alphas = method_alphas.get(m, [])
         if not alphas:
-            logger.warning(f"[{bl}] No alphas found. Skipping baseline {bl}.")
+            logger.warning(f"[{m}] No alphas found. Skipping method {m}.")
             continue
         
-        baseline_dir = os.path.join(output_dir, f"baseline_{bl}")
-        os.makedirs(baseline_dir, exist_ok=True)
+        method_dir = os.path.join(output_dir, f"method_{m}")
+        os.makedirs(method_dir, exist_ok=True)
         
-        # Per-alpha aggregation for this baseline
+        # Per-alpha aggregation for this method
         for alpha in alphas:
             # Discover number of runs for this alpha (from input directory)
-            num_runs = discover_num_runs(input_dir, bl, alpha)
+            num_runs = discover_num_runs(input_dir, m, alpha)
             if num_runs == 0:
                 logger.warning(
-                    f"[{bl}] No runs found for alpha={alpha}. Skipping."
+                    f"[{m}] No runs found for alpha={alpha}. Skipping."
                 )
                 continue
             
-            logger.info(f"[{bl}] Processing alpha={alpha} with {num_runs} runs")
+            logger.info(f"[{m}] Processing alpha={alpha} with {num_runs} runs")
             
             # Aggregate per alpha (if metrics mode)
             # Note: aggregate_per_alpha reads from input_dir but writes to output_dir
             if generate_metrics:
                 aggregate_per_alpha(
                     out_dir=output_dir,
-                    baseline=bl,
+                    baseline=m,
                     alpha=alpha,
                     num_runs=num_runs,
                     levels=levels,
@@ -222,11 +222,11 @@ Examples:
             # Per-alpha plotting (boxplots) (if plots mode)
             if generate_plots:
                 # Check both input and output directories for aggregated files
-                alpha_dir_output = os.path.join(baseline_dir, f"alpha_{alpha}")
-                alpha_agg_dir_output = os.path.join(alpha_dir_output, f"{bl}_alpha_{alpha}_aggregated")
+                alpha_dir_output = os.path.join(method_dir, f"alpha_{alpha}")
+                alpha_agg_dir_output = os.path.join(alpha_dir_output, f"{m}_alpha_{alpha}_aggregated")
                 
-                alpha_dir_input = os.path.join(input_dir, f"baseline_{bl}", f"alpha_{alpha}")
-                alpha_agg_dir_input = os.path.join(alpha_dir_input, f"{bl}_alpha_{alpha}_aggregated")
+                alpha_dir_input = os.path.join(input_dir, f"method_{m}", f"alpha_{alpha}")
+                alpha_agg_dir_input = os.path.join(alpha_dir_input, f"{m}_alpha_{alpha}_aggregated")
                 
                 # Use output directory if it exists, otherwise try input directory
                 alpha_agg_dir = None
@@ -250,15 +250,15 @@ Examples:
                     try:
                         plot_alpha_boxplots(alpha_dir=alpha_agg_dir)
                     except (IOError, OSError, ValueError) as e:
-                        logger.warning(f"[{bl}] Per-alpha plotting failed for alpha={alpha}: {e}")
+                        logger.warning(f"[{m}] Per-alpha plotting failed for alpha={alpha}: {e}")
                 else:
-                    logger.debug(f"[{bl}] No aggregated data found for alpha={alpha} (checked: {alpha_agg_dir_output}, {alpha_agg_dir_input})")
+                    logger.debug(f"[{m}] No aggregated data found for alpha={alpha} (checked: {alpha_agg_dir_output}, {alpha_agg_dir_input})")
         
-        # Cross-alpha aggregation for this baseline (if metrics mode)
+        # Cross-alpha aggregation for this method (if metrics mode)
         if generate_metrics:
             aggregate_cross_alpha(
                 out_dir=output_dir,
-                baseline=bl,
+                baseline=m,
                 alphas=alphas,
                 levels=levels,
                 metric_keys=metric_keys,
@@ -268,10 +268,10 @@ Examples:
         # Cross-alpha plotting (if plots mode)
         if generate_plots:
             # Check both input and output directories for aggregated files
-            bl_agg_dir_output = os.path.join(baseline_dir, f"{bl}_aggregated")
+            bl_agg_dir_output = os.path.join(method_dir, f"{m}_aggregated")
             cross_csv_output = os.path.join(bl_agg_dir_output, "metrics_across_alphas.csv")
             
-            bl_agg_dir_input = os.path.join(input_dir, f"baseline_{bl}", f"{bl}_aggregated")
+            bl_agg_dir_input = os.path.join(input_dir, f"method_{m}", f"{m}_aggregated")
             cross_csv_input = os.path.join(bl_agg_dir_input, "metrics_across_alphas.csv")
             
             # Use output directory if it exists, otherwise try input directory
@@ -289,46 +289,46 @@ Examples:
                 try:
                     plot_aggregate_lines(out_dir=bl_agg_dir, cross_alpha_csv=cross_csv)
                 except (IOError, OSError, ValueError) as e:
-                    logger.warning(f"[{bl}] Aggregate plotting failed: {e}")
+                    logger.warning(f"[{m}] Aggregate plotting failed: {e}")
             else:
-                logger.debug(f"[{bl}] No cross-alpha metrics found (checked: {cross_csv_output}, {cross_csv_input})")
+                logger.debug(f"[{m}] No cross-alpha metrics found (checked: {cross_csv_output}, {cross_csv_input})")
     
-    # Cross-baseline aggregation (if metrics mode)
-    if len(baselines) > 1:
+    # Cross-method aggregation (if metrics mode)
+    if len(methods) > 1:
         if generate_metrics:
             aggregate_cross_baseline(
                 out_dir=output_dir,
-                baselines=baselines,
+                baselines=methods,
                 logger=logger
             )
         
-        # Cross-baseline plotting (if plots mode)
+        # Cross-method plotting (if plots mode)
         if generate_plots:
             # Check both input and output directories for aggregated files
-            ab_dir_output = os.path.join(output_dir, "AB_aggregated")
-            combined_csv_output = os.path.join(ab_dir_output, "metrics_across_alphas_by_baseline.csv")
+            methods_dir_output = os.path.join(output_dir, "methods_aggregated")
+            combined_csv_output = os.path.join(methods_dir_output, "metrics_across_alphas_by_method.csv")
             
-            ab_dir_input = os.path.join(input_dir, "AB_aggregated")
-            combined_csv_input = os.path.join(ab_dir_input, "metrics_across_alphas_by_baseline.csv")
+            methods_dir_input = os.path.join(input_dir, "methods_aggregated")
+            combined_csv_input = os.path.join(methods_dir_input, "metrics_across_alphas_by_method.csv")
             
             # Use output directory if it exists, otherwise try input directory
             combined_csv = None
-            ab_dir = None
+            methods_dir = None
             if os.path.exists(combined_csv_output):
                 combined_csv = combined_csv_output
-                ab_dir = ab_dir_output
+                methods_dir = methods_dir_output
             elif os.path.exists(combined_csv_input):
                 combined_csv = combined_csv_input
-                ab_dir = ab_dir_output  # Write plots to output directory
-                os.makedirs(ab_dir_output, exist_ok=True)
+                methods_dir = methods_dir_output  # Write plots to output directory
+                os.makedirs(methods_dir_output, exist_ok=True)
             
             if combined_csv and os.path.exists(combined_csv):
                 try:
-                    plot_ab_comparison(ab_dir=ab_dir, combined_csv=combined_csv)
+                    plot_ab_comparison(ab_dir=methods_dir, combined_csv=combined_csv)
                 except (IOError, OSError, ValueError) as e:
-                    logger.warning(f"AB aggregated plotting failed: {e}")
+                    logger.warning(f"Methods aggregated plotting failed: {e}")
             else:
-                logger.debug(f"No AB aggregated metrics found (checked: {combined_csv_output}, {combined_csv_input})")
+                logger.debug(f"No methods aggregated metrics found (checked: {combined_csv_output}, {combined_csv_input})")
     
     logger.info("Regeneration complete!")
 

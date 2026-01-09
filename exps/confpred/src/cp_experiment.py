@@ -31,12 +31,6 @@ from exps.confpred.common.projection import (
 )
 from exps.confpred.src.constants import DEFAULT_VAL_SIZE, DEFAULT_VARIANCE_THRESHOLD
 from exps.confpred.src.utils import derive_mode_mapping, build_hierarchy_mappings
-from exps.confpred.src.scp_solver import (
-    StructuredCPSolver,
-    calibrate_scp,
-    project_scp_to_levels,
-    diagnose_probability_shift,
-)
 
 
 def ensure_ancestor_consistency(df: pd.DataFrame, maps: Dict[str, Dict[int, int]], logger: logging.Logger) -> pd.DataFrame:
@@ -488,8 +482,8 @@ def save_split_summary(out_dir: str, split_info: Dict):
         json.dump(split_info, f, indent=2)
 
 
-def save_b_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: float, run_idx: int):
-    """Save Baseline B CP artifacts.
+def save_loupcp_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: float, run_idx: int):
+    """Save LoUP-CP CP artifacts.
     
     Args:
         out_dir_target: Output directory
@@ -499,16 +493,16 @@ def save_b_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: f
         run_idx: Run index
     """
     os.makedirs(out_dir_target, exist_ok=True)
-    # Use same format as baseline A: B_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}
-    json_path = os.path.join(out_dir_target, f"B_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json")
-    csv_path = os.path.join(out_dir_target, f"B_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.csv")
+    # Use same format as Lw-CP: LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}
+    json_path = os.path.join(out_dir_target, f"LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json")
+    csv_path = os.path.join(out_dir_target, f"LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.csv")
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)
     flat = {k: v for k, v in summary.items() if not isinstance(v, (list, dict))}
     pd.DataFrame([flat]).to_csv(csv_path, index=False)
 
 
-def run_baseline_b(
+def run_loupcp(
     df: pd.DataFrame,
     maps: Dict,
     input_params: Dict,
@@ -523,17 +517,17 @@ def run_baseline_b(
     idx_test_leaf_seen: np.ndarray,
     y_test_leaf_global_aligned: np.ndarray,
     alpha_single: float,
-    base_pred_labels_from_A: Dict[str, Dict[int, str]],
+    base_pred_labels_from_LwCP: Dict[str, Dict[int, str]],
     logger: logging.Logger,
-    out_dir_B: Optional[str] = None,
+    out_dir_LoUPCP: Optional[str] = None,
 ) -> None:
-    """Run Baseline B: Leaf-only CP with upward closure.
+    """Run LoUP-CP: Leaf-only CP with upward closure.
     
     Args:
         df: DataFrame with data
         maps: Mapping dictionaries
         input_params: Input parameters
-        out_dir: Output directory for Baseline A
+        out_dir: Output directory for Lw-CP
         leaf_vocab_global: Leaf vocabulary (global indices)
         major_vocab_global: Major vocabulary (global indices)
         family_vocab_global: Family vocabulary (global indices)
@@ -544,26 +538,26 @@ def run_baseline_b(
         idx_test_leaf_seen: Test leaf seen indices
         y_test_leaf_global_aligned: Test leaf global labels (aligned)
         alpha_single: Alpha value
-        base_pred_labels_from_A: Base predictions from Baseline A
+        base_pred_labels_from_LwCP: Base predictions from Lw-CP
         logger: Logger instance
-        out_dir_B: Optional output directory for Baseline B (defaults to out_dir if None)
+        out_dir_LoUPCP: Optional output directory for LoUP-CP (defaults to out_dir if None)
     """
     logger.info("=" * 80)
-    logger.info("Processing Baseline B: Leaf-only CP with upward projection")
+    logger.info("Processing LoUP-CP: Leaf-only CP with upward projection")
     logger.info("=" * 80)
     
     # Check if we have all required data
     if leaf_vocab_global is None or probs_test_leaf is None or q_hat_leaf is None or idx_test_leaf_seen is None:
-        logger.warning("Baseline B requires leaf level data. Skipping Baseline B.")
+        logger.warning("LoUP-CP requires leaf level data. Skipping LoUP-CP.")
         return
     elif m_leaf == 0:
-        logger.warning("Baseline B requires non-empty leaf calibration set. Skipping Baseline B.")
+        logger.warning("LoUP-CP requires non-empty leaf calibration set. Skipping LoUP-CP.")
         return
     
-    # Save Baseline B files to the provided out_dir_B (or fallback to out_dir if not provided)
-    if out_dir_B is None:
-        out_dir_B = out_dir
-    os.makedirs(out_dir_B, exist_ok=True)
+    # Save LoUP-CP files to the provided out_dir_LoUPCP (or fallback to out_dir if not provided)
+    if out_dir_LoUPCP is None:
+        out_dir_LoUPCP = out_dir
+    os.makedirs(out_dir_LoUPCP, exist_ok=True)
     
     # Extract run_idx from path (e.g., .../run_1 -> 1)
     norm_out = os.path.normpath(out_dir)
@@ -596,19 +590,19 @@ def run_baseline_b(
         logger,
     )
     
-    # Baseline B quantile: reuse A's leaf quantile
-    q_hat_B = q_hat_leaf
-    logger.info(f"Baseline B using leaf quantile: q_hat_B = {q_hat_B:.6f} (reused from A leaf alpha={alpha_single})")
+    # LoUP-CP quantile: reuse Lw-CP's leaf quantile
+    q_hat_LoUPCP = q_hat_leaf
+    logger.info(f"LoUP-CP using leaf quantile: q_hat_LoUPCP = {q_hat_LoUPCP:.6f} (reused from Lw-CP leaf alpha={alpha_single})")
     
-    # Test-time hook for B: reuse A's test tensors
+    # Test-time hook for LoUP-CP: reuse Lw-CP's test tensors
     # Filter test samples to closed-set at leaf level (same as A)
     # Note: probs_test_leaf and y_test_leaf_global_aligned are already aligned from A's processing
     y_test_leaf_global = y_test_leaf_global_aligned
     
-    # Build leaf local mapping for B
+    # Build leaf local mapping for LoUP-CP
     # Use integer keys to match the types in labels
-    leaf_g2l_B = {int(g): i for i, g in enumerate(leaf_vocab_global)}
-    test_leaf_seen_mask = np.array([int(g) in leaf_g2l_B for g in y_test_leaf_global])
+    leaf_g2l_LoUPCP = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    test_leaf_seen_mask = np.array([int(g) in leaf_g2l_LoUPCP for g in y_test_leaf_global])
     
     # Apply leaf closed-set filter
     probs_test_leaf_subset = probs_test_leaf[test_leaf_seen_mask]
@@ -620,22 +614,22 @@ def run_baseline_b(
     y_test_family_global = df.iloc[idx_test_leaf_subset]["family_idx"].astype("Int64").values
     
     logger.info(
-        f"Baseline B test filtering: {len(y_test_leaf_global)} total, "
+        f"LoUP-CP test filtering: {len(y_test_leaf_global)} total, "
         f"{test_leaf_seen_mask.sum()} with leaf in vocab"
     )
     
-    # Build leaf keep masks for B
+    # Build leaf keep masks for LoUP-CP
     scores_leaf = 1.0 - probs_test_leaf_subset
-    keep_leaf_bool = (scores_leaf <= q_hat_B)  # [N, m_leaf]
+    keep_leaf_bool = (scores_leaf <= q_hat_LoUPCP)  # [N, m_leaf]
     
     # Project upward
     keep_major_bool, keep_family_bool = project_leaf_masks_upward(
         keep_leaf_bool, A_major, A_family
     )
     
-    # Map true labels to local indices aligned with A_* matrices
+    # Map true labels to local indices aligned with Lw-CP matrices
     # Leaf level - convert to int for dictionary lookup consistency
-    y_leaf_local = np.array([leaf_g2l_B[int(g)] for g in y_test_leaf_global_subset], dtype="int64")
+    y_leaf_local = np.array([leaf_g2l_LoUPCP[int(g)] for g in y_test_leaf_global_subset], dtype="int64")
     
     # Major level: filter to samples where major is in vocab
     maj_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in maj_g2l 
@@ -652,19 +646,19 @@ def run_baseline_b(
     keep_family_bool_filtered = keep_family_bool[fam_in_vocab_mask]
     
     logger.info(
-        f"Baseline B per-level test filtering: "
+        f"LoUP-CP per-level test filtering: "
         f"major: {maj_in_vocab_mask.sum()}/{len(maj_in_vocab_mask)} in vocab, "
         f"family: {fam_in_vocab_mask.sum()}/{len(fam_in_vocab_mask)} in vocab"
     )
     
-    # Evaluate Baseline B
-    logger.info("Baseline B: Reusing calibration from Baseline A (no separate calibration time)")
-    test_start_time_B = time.time()
-    metrics_B_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
-    metrics_B_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
-    metrics_B_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
-    test_time_B = time.time() - test_start_time_B
-    logger.info(f"Baseline B testing: num_test_samples={len(y_leaf_local)}, time={test_time_B:.4f}s")
+    # Evaluate LoUP-CP
+    logger.info("LoUP-CP: Reusing calibration from Lw-CP (no separate calibration time)")
+    test_start_time_LoUPCP = time.time()
+    metrics_LoUPCP_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
+    metrics_LoUPCP_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
+    metrics_LoUPCP_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
+    test_time_LoUPCP = time.time() - test_start_time_LoUPCP
+    logger.info(f"LoUP-CP testing: num_test_samples={len(y_leaf_local)}, time={test_time_LoUPCP:.4f}s")
     
     # Compute top1_acc_non_empty and base_top1_acc at leaf level
     # Initialize variables for use in major/family calculations
@@ -676,7 +670,7 @@ def run_baseline_b(
     if keep_leaf_bool.shape[0] > 0:
         # Base top1: argmax from all probs (unmasked)
         base_top1_leaf = probs_test_leaf_subset.argmax(axis=1)
-        metrics_B_leaf["base_top1_acc"] = float(np.mean(base_top1_leaf == y_leaf_local))
+        metrics_LoUPCP_leaf["base_top1_acc"] = float(np.mean(base_top1_leaf == y_leaf_local))
         
         # Map to global indices for use in major/family calculations
         base_top1_leaf_global = np.array([leaf_vocab_global[base_top1_leaf[i]] for i in range(len(base_top1_leaf))])
@@ -686,15 +680,15 @@ def run_baseline_b(
         top1_leaf = masked_probs_leaf.argmax(axis=1)
         non_empty_leaf = keep_leaf_bool.sum(axis=1) > 0
         if np.any(non_empty_leaf):
-            metrics_B_leaf["top1_acc_non_empty"] = float(np.mean((top1_leaf[non_empty_leaf] == y_leaf_local[non_empty_leaf])))
+            metrics_LoUPCP_leaf["top1_acc_non_empty"] = float(np.mean((top1_leaf[non_empty_leaf] == y_leaf_local[non_empty_leaf])))
         else:
-            metrics_B_leaf["top1_acc_non_empty"] = float("nan")
+            metrics_LoUPCP_leaf["top1_acc_non_empty"] = float("nan")
         
         # Map to global indices for use in major/family calculations
         top1_leaf_global = np.array([leaf_vocab_global[top1_leaf[i]] for i in range(len(top1_leaf))])
     else:
-        metrics_B_leaf["top1_acc_non_empty"] = float("nan")
-        metrics_B_leaf["base_top1_acc"] = float("nan")
+        metrics_LoUPCP_leaf["top1_acc_non_empty"] = float("nan")
+        metrics_LoUPCP_leaf["base_top1_acc"] = float("nan")
     
     # Compute top1_acc_non_empty and base_top1_acc for major level
     # Use leaf argmax predictions mapped up to major via hierarchy
@@ -711,9 +705,9 @@ def run_baseline_b(
             base_top1_major_local = np.array([maj_g2l[int(g)] for g in base_top1_major_global[maj_valid_mask]], dtype="int64")
             # Align mask to compressed y_major_local (which is filtered by maj_in_vocab_mask)
             y_major_local_valid = y_major_local[maj_valid_mask[maj_in_vocab_mask]]
-            metrics_B_major["base_top1_acc"] = float(np.mean(base_top1_major_local == y_major_local_valid))
+            metrics_LoUPCP_major["base_top1_acc"] = float(np.mean(base_top1_major_local == y_major_local_valid))
         else:
-            metrics_B_major["base_top1_acc"] = float("nan")
+            metrics_LoUPCP_major["base_top1_acc"] = float("nan")
         
         # Top1 within set: use leaf top1 (within set) mapped to major
         if top1_leaf_global is not None:
@@ -729,14 +723,14 @@ def run_baseline_b(
                 top1_major_local = np.array([maj_g2l[int(g)] for g in top1_major_global[maj_in_set_mask]], dtype="int64")
                 # Align mask to compressed y_major_local (filtered by maj_in_vocab_mask)
                 y_major_local_in_set = y_major_local[maj_in_set_mask[maj_in_vocab_mask]]
-                metrics_B_major["top1_acc_non_empty"] = float(np.mean(top1_major_local == y_major_local_in_set))
+                metrics_LoUPCP_major["top1_acc_non_empty"] = float(np.mean(top1_major_local == y_major_local_in_set))
             else:
-                metrics_B_major["top1_acc_non_empty"] = float("nan")
+                metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
         else:
-            metrics_B_major["top1_acc_non_empty"] = float("nan")
+            metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
     else:
-        metrics_B_major["top1_acc_non_empty"] = float("nan")
-        metrics_B_major["base_top1_acc"] = float("nan")
+        metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
+        metrics_LoUPCP_major["base_top1_acc"] = float("nan")
     
     # Compute top1_acc_non_empty and base_top1_acc for family level
     # Use leaf argmax predictions mapped up to family via hierarchy
@@ -753,9 +747,9 @@ def run_baseline_b(
             base_top1_family_local = np.array([fam_g2l[int(g)] for g in base_top1_family_global[fam_valid_mask]], dtype="int64")
             # Align mask to compressed y_family_local (which is filtered by fam_in_vocab_mask)
             y_family_local_valid = y_family_local[fam_valid_mask[fam_in_vocab_mask]]
-            metrics_B_family["base_top1_acc"] = float(np.mean(base_top1_family_local == y_family_local_valid))
+            metrics_LoUPCP_family["base_top1_acc"] = float(np.mean(base_top1_family_local == y_family_local_valid))
         else:
-            metrics_B_family["base_top1_acc"] = float("nan")
+            metrics_LoUPCP_family["base_top1_acc"] = float("nan")
         
         # Top1 within set: use leaf top1 (within set) mapped to family
         if top1_leaf_global is not None:
@@ -771,16 +765,16 @@ def run_baseline_b(
                 top1_family_local = np.array([fam_g2l[int(g)] for g in top1_family_global[fam_in_set_mask]], dtype="int64")
                 # Align mask to compressed y_family_local (filtered by fam_in_vocab_mask)
                 y_family_local_in_set = y_family_local[fam_in_set_mask[fam_in_vocab_mask]]
-                metrics_B_family["top1_acc_non_empty"] = float(np.mean(top1_family_local == y_family_local_in_set))
+                metrics_LoUPCP_family["top1_acc_non_empty"] = float(np.mean(top1_family_local == y_family_local_in_set))
             else:
-                metrics_B_family["top1_acc_non_empty"] = float("nan")
+                metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
         else:
-            metrics_B_family["top1_acc_non_empty"] = float("nan")
+            metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
     else:
-        metrics_B_family["top1_acc_non_empty"] = float("nan")
-        metrics_B_family["base_top1_acc"] = float("nan")
+        metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
+        metrics_LoUPCP_family["base_top1_acc"] = float("nan")
 
-    # Compute HIR for Baseline B using projected sets
+    # Compute HIR for LoUP-CP using projected sets
     hir_family_sets: Dict[int, set] = {}
     hir_major_sets: Dict[int, set] = {}
     hir_leaf_sets: Dict[int, set] = {}
@@ -795,14 +789,14 @@ def run_baseline_b(
             int(family_vocab_global[j]) for j in np.where(keep_family_bool[i])[0]
         )
 
-    hir_rate_B = compute_hir_rate(
+    hir_rate_LoUPCP = compute_hir_rate(
         hir_family_sets,
         hir_major_sets,
         hir_leaf_sets,
         leaf_to_major_global,
         major_to_family_global,
     )
-    metrics_B_family["hir"] = hir_rate_B
+    metrics_LoUPCP_family["hir"] = hir_rate_LoUPCP
     
     # Prepare labels for artifacts (same order as A)
     idx2id_map_leaf = {v: k for k, v in maps["leaf_id2idx"].items()}
@@ -814,50 +808,50 @@ def run_baseline_b(
     idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
     class_labels_family = [str(idx2id_map_family.get(int(gidx), str(int(gidx)))) for gidx in family_vocab_global]
     
-    # Save B artifacts
+    # Save LoUP-CP artifacts
     # Leaf summary
-    summary_B_leaf = {
+    summary_LoUPCP_leaf = {
         "level": "leaf",
-        "alpha_B": alpha_single,  # Note: reused A leaf alpha
+        "alpha_LoUPCP": alpha_single,  # Note: reused Lw-CP leaf alpha
         "m_cal": m_leaf,
-        "q_hat_leaf_B": q_hat_B,
-        "metrics": metrics_B_leaf,
+        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
+        "metrics": metrics_LoUPCP_leaf,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_leaf_local.shape[0]),
         "class_labels": class_labels_leaf,
     }
-    save_b_cp_artifacts(out_dir_B, "leaf", summary_B_leaf, alpha_single, run_idx)
-    logger.info(f"Saved Baseline B CP summary for leaf -> {out_dir_B}/B_alpha_{alpha_single}_run_{run_idx}_cp_leaf_summary.json")
+    save_loupcp_cp_artifacts(out_dir_LoUPCP, "leaf", summary_LoUPCP_leaf, alpha_single, run_idx)
+    logger.info(f"Saved LoUP-CP CP summary for leaf -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_leaf_summary.json")
     
     # Major summary
-    summary_B_major = {
+    summary_LoUPCP_major = {
         "level": "major",
-        "alpha_B": alpha_single,
+        "alpha_LoUPCP": alpha_single,
         "m_cal": m_leaf,
-        "q_hat_leaf_B": q_hat_B,
-        "metrics": metrics_B_major,
+        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
+        "metrics": metrics_LoUPCP_major,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_major_local.shape[0]),
         "class_labels": class_labels_major,
     }
-    save_b_cp_artifacts(out_dir_B, "major", summary_B_major, alpha_single, run_idx)
-    logger.info(f"Saved Baseline B CP summary for major -> {out_dir_B}/B_alpha_{alpha_single}_run_{run_idx}_cp_major_summary.json")
+    save_loupcp_cp_artifacts(out_dir_LoUPCP, "major", summary_LoUPCP_major, alpha_single, run_idx)
+    logger.info(f"Saved LoUP-CP CP summary for major -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_major_summary.json")
     
     # Family summary
-    summary_B_family = {
+    summary_LoUPCP_family = {
         "level": "family",
-        "alpha_B": alpha_single,
+        "alpha_LoUPCP": alpha_single,
         "m_cal": m_leaf,
-        "q_hat_leaf_B": q_hat_B,
-        "metrics": metrics_B_family,
+        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
+        "metrics": metrics_LoUPCP_family,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_family_local.shape[0]),
         "class_labels": class_labels_family,
     }
-    save_b_cp_artifacts(out_dir_B, "family", summary_B_family, alpha_single, run_idx)
-    logger.info(f"Saved Baseline B CP summary for family -> {out_dir_B}/B_alpha_{alpha_single}_run_{run_idx}_cp_family_summary.json")
+    save_loupcp_cp_artifacts(out_dir_LoUPCP, "family", summary_LoUPCP_family, alpha_single, run_idx)
+    logger.info(f"Saved LoUP-CP CP summary for family -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_family_summary.json")
     
-    # Build per-sample details for Baseline B
+    # Build per-sample details for LoUP-CP
     # Leaf predictions (argmax from masked probs)
     if keep_leaf_bool.shape[0] > 0:
         masked_probs_leaf = np.where(keep_leaf_bool, probs_test_leaf_subset, -np.inf)
@@ -890,16 +884,16 @@ def run_baseline_b(
             kept_labels = [str(idx2id_map.get(int(g), str(int(g)))) for g in kept_global]
             return "|".join(kept_labels)
         
-        # Build per-level details for Baseline B
+        # Build per-level details for LoUP-CP
         levels = ["family", "major", "leaf"]
-        per_level_details_B = {"family": {}, "major": {}, "leaf": {}}
+        per_level_details_LoUPCP = {"family": {}, "major": {}, "leaf": {}}
         for i, global_row_idx in enumerate(idx_test_leaf_subset):
             # Leaf level
-            # Use A's leaf model prediction for pred_leaf
-            leaf_pred_label = base_pred_labels_from_A.get("leaf", {}).get(int(global_row_idx), "")
+            # Use Lw-CP's leaf model prediction for pred_leaf
+            leaf_pred_label = base_pred_labels_from_LwCP.get("leaf", {}).get(int(global_row_idx), "")
             leaf_true_label = str(idx2id_map_leaf.get(int(y_test_leaf_global_full[i]), str(int(y_test_leaf_global_full[i])))) if pd.notna(y_test_leaf_global_full[i]) else ""
             leaf_set = mask_to_label_set(keep_leaf_bool[i], leaf_vocab_global, idx2id_map_leaf)
-            per_level_details_B["leaf"][int(global_row_idx)] = {
+            per_level_details_LoUPCP["leaf"][int(global_row_idx)] = {
                 "true_leaf": leaf_true_label,
                 "pred_leaf": leaf_pred_label,
                 "set_leaf": leaf_set,
@@ -907,12 +901,12 @@ def run_baseline_b(
             
             # Major level (use full upward closure for all test samples)
             if pd.notna(y_test_major_global_full[i]):
-                # Use A's major model prediction for pred_major
-                major_pred_label = base_pred_labels_from_A.get("major", {}).get(int(global_row_idx), "")
+                # Use Lw-CP's major model prediction for pred_major
+                major_pred_label = base_pred_labels_from_LwCP.get("major", {}).get(int(global_row_idx), "")
                 major_true_label = str(idx2id_map_major.get(int(y_test_major_global_full[i]), str(int(y_test_major_global_full[i]))))
                 # Use full keep_major_bool (not filtered) for all test samples
                 major_set = mask_to_label_set(keep_major_bool[i], major_vocab_global, idx2id_map_major)
-                per_level_details_B["major"][int(global_row_idx)] = {
+                per_level_details_LoUPCP["major"][int(global_row_idx)] = {
                     "true_major": major_true_label,
                     "pred_major": major_pred_label,
                     "set_major": major_set,
@@ -920,719 +914,69 @@ def run_baseline_b(
             
             # Family level (use full upward closure for all test samples)
             if pd.notna(y_test_family_global_full[i]):
-                # Use A's family model prediction for pred_family
-                family_pred_label = base_pred_labels_from_A.get("family", {}).get(int(global_row_idx), "")
+                # Use Lw-CP's family model prediction for pred_family
+                family_pred_label = base_pred_labels_from_LwCP.get("family", {}).get(int(global_row_idx), "")
                 family_true_label = str(idx2id_map_family.get(int(y_test_family_global_full[i]), str(int(y_test_family_global_full[i]))))
                 # Use full keep_family_bool (not filtered) for all test samples
                 family_set = mask_to_label_set(keep_family_bool[i], family_vocab_global, idx2id_map_family)
-                per_level_details_B["family"][int(global_row_idx)] = {
+                per_level_details_LoUPCP["family"][int(global_row_idx)] = {
                     "true_family": family_true_label,
                     "pred_family": family_pred_label,
                     "set_family": family_set,
                 }
         
-        # Merge per-level details into a single DataFrame and save for Baseline B
+        # Merge per-level details into a single DataFrame and save for LoUP-CP
         # Use only test set indices that have at least one level prediction
-        test_indices_with_predictions_B = set()
+        test_indices_with_predictions_LoUPCP = set()
         for lvl in levels:
-            test_indices_with_predictions_B.update(per_level_details_B[lvl].keys())
-        test_indices_sorted_B = sorted([int(i) for i in test_indices_with_predictions_B])
-        rows_B = []
-        for idx in test_indices_sorted_B:
+            test_indices_with_predictions_LoUPCP.update(per_level_details_LoUPCP[lvl].keys())
+        test_indices_sorted_LoUPCP = sorted([int(i) for i in test_indices_with_predictions_LoUPCP])
+        rows_LoUPCP = []
+        for idx in test_indices_sorted_LoUPCP:
             # Only include rows that are in the test set
             if idx not in idx_test_leaf_defined:
                 continue
             row = {"index": idx}
             for lvl in levels:
-                det = per_level_details_B[lvl].get(idx, {})
+                det = per_level_details_LoUPCP[lvl].get(idx, {})
                 row.update({
                     f"true_{lvl}": det.get(f"true_{lvl}", ""),
                     f"pred_{lvl}": det.get(f"pred_{lvl}", ""),
                     f"set_{lvl}": det.get(f"set_{lvl}", ""),
                 })
-            rows_B.append(row)
-        if rows_B:
-            details_df_B = pd.DataFrame(rows_B).set_index("index").sort_index()
-            details_csv_B = os.path.join(out_dir_B, f"B_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
-            details_df_B.to_csv(details_csv_B)
-            logger.info(f"Saved per-sample run details for Baseline B (test set only) -> {details_csv_B}")
+            rows_LoUPCP.append(row)
+        if rows_LoUPCP:
+            details_df_LoUPCP = pd.DataFrame(rows_LoUPCP).set_index("index").sort_index()
+            details_csv_LoUPCP = os.path.join(out_dir_LoUPCP, f"LoUPCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
+            details_df_LoUPCP.to_csv(details_csv_LoUPCP)
+            logger.info(f"Saved per-sample run details for LoUP-CP (test set only) -> {details_csv_LoUPCP}")
     
-    logger.info("Baseline B one-shot CP experiment completed")
+    logger.info("LoUP-CP one-shot CP experiment completed")
 
 
-def run_baseline_scp(
-    df: pd.DataFrame,
-    maps: Dict,
-    input_params: Dict,
-    out_dir: str,
-    leaf_vocab_global: np.ndarray,
-    major_vocab_global: np.ndarray,
-    family_vocab_global: np.ndarray,
-    leaf_to_major_global: Dict[int, int],
-    major_to_family_global: Dict[int, int],
-    leaf_to_family_global: Dict[int, int],
-    probs_test_leaf: np.ndarray,
-    probs_cal_leaf: np.ndarray,
-    y_test_leaf_global: np.ndarray,
-    y_cal_leaf_global: np.ndarray,
-    idx_test_leaf_defined: np.ndarray,
-    idx_test_leaf_seen: np.ndarray,
-    idx_cal_leaf_seen: np.ndarray,
-    alpha_single: float,
-    base_pred_labels_from_A: Dict[str, Dict[int, str]],
-    logger: logging.Logger,
-    out_dir_SCP: Optional[str] = None,
-) -> None:
-    """Run Baseline S-CP: Structured Conformal Prediction.
-    
-    Args:
-        df: DataFrame with data
-        maps: Mapping dictionaries
-        input_params: Input parameters
-        out_dir: Output directory for Baseline A
-        leaf_vocab_global: Leaf vocabulary (global indices)
-        major_vocab_global: Major vocabulary (global indices)
-        family_vocab_global: Family vocabulary (global indices)
-        leaf_to_major_global: Mapping from leaf indices to major indices (reused from Baseline A)
-        major_to_family_global: Mapping from major indices to family indices (reused from Baseline A)
-        leaf_to_family_global: Mapping from leaf indices to family indices (reused from Baseline A)
-        probs_test_leaf: Leaf test probabilities [n_test, n_leaves]
-        probs_cal_leaf: Leaf calibration probabilities [n_cal, n_leaves]
-        y_test_leaf_global: Test leaf global labels
-        y_cal_leaf_global: Calibration leaf global labels
-        idx_test_leaf_defined: Test leaf defined indices
-        idx_test_leaf_seen: Test leaf seen indices
-        idx_cal_leaf_seen: Calibration leaf seen indices
-        alpha_single: Alpha value
-        base_pred_labels_from_A: Base predictions from Baseline A
-        logger: Logger instance
-        out_dir_SCP: Optional output directory for Baseline S-CP
-    """
-    logger.info("=" * 80)
-    logger.info("Processing Baseline S-CP: Structured Conformal Prediction")
-    logger.info("=" * 80)
-    
-    # Check if we have all required data
-    if (leaf_vocab_global is None or probs_test_leaf is None or 
-        probs_cal_leaf is None or idx_test_leaf_seen is None):
-        logger.warning("Baseline S-CP requires leaf level data. Skipping Baseline S-CP.")
-        return
-    
-    # Save Baseline S-CP files to the provided out_dir_SCP (or fallback to out_dir if not provided)
-    if out_dir_SCP is None:
-        out_dir_SCP = out_dir
-    os.makedirs(out_dir_SCP, exist_ok=True)
-    
-    # Extract run_idx from path
-    norm_out = os.path.normpath(out_dir)
-    run_idx = 1  # default
-    try:
-        path_parts = norm_out.split(os.sep)
-        for part in path_parts:
-            if part.startswith("run_") and len(part) > 4:
-                try:
-                    run_idx = int(part[4:])
-                    break
-                except ValueError:
-                    pass
-    except Exception:
-        logger.warning(f"Could not extract run_idx from path {norm_out}, using default {run_idx}")
-    
-    # Reuse hierarchy mappings passed from run_baseline_a_one_shot
-    logger.info("Using hierarchy mappings from Baseline A")
-    
-    # Get S-CP hyperparameter m (max nodes in prediction set)
-    m_scp = int(input_params.get("scp_m", 4))
-    logger.info(f"S-CP hyperparameter m (max nodes): {m_scp}")
-    
-    # Get S-CP fallback mode
-    use_fallback = bool(input_params.get("scp_use_fallback", False))
-    logger.info(f"S-CP fallback mode: {'pragmatic' if use_fallback else 'rigorous'}")
-    
-    # Validate inputs before creating solver factory
-    if probs_cal_leaf is None or leaf_vocab_global is None:
-        raise ValueError("Missing required data for S-CP: probs_cal_leaf or leaf_vocab_global is None")
-    
-    if probs_cal_leaf.shape[1] != len(leaf_vocab_global):
-        raise ValueError(
-            f"Critical alignment error: probs_cal_leaf has {probs_cal_leaf.shape[1]} classes, "
-            f"but leaf_vocab_global has {len(leaf_vocab_global)} classes. "
-            "Probabilities must be aligned with vocabulary. Check that classes_ was properly saved and loaded."
-        )
-    
-    logger.info(
-        f"S-CP input validation: "
-        f"probs_cal_shape={probs_cal_leaf.shape}, "
-        f"probs_test_shape={probs_test_leaf.shape}, "
-        f"leaf_vocab_size={len(leaf_vocab_global)}, "
-        f"major_vocab_size={len(major_vocab_global)}, "
-        f"family_vocab_size={len(family_vocab_global)}, "
-        f"m={m_scp}"
-    )
-    
-    # Diagnostic: Check for probability shift between Cal and Test
-    logger.info("Running probability shift diagnostic...")
-    try:
-        diagnose_probability_shift(
-            probs_cal=probs_cal_leaf,
-            y_cal_global=y_cal_leaf_global,
-            probs_test=probs_test_leaf,
-            y_test_global=y_test_leaf_global,
-            leaf_vocab_global=leaf_vocab_global,
-            logger=logger
-        )
-    except Exception as e:
-        logger.warning(f"Probability shift diagnostic failed with exception: {e}")
-        logger.warning("Continuing with calibration despite diagnostic failure...")
-    
-    # Create solver factory for calibration
-    def solver_factory(leaf_probs):
-        # Validate each probability vector before creating solver
-        if len(leaf_probs) != len(leaf_vocab_global):
-            raise ValueError(
-                f"Solver factory: dimension mismatch - "
-                f"leaf_probs has {len(leaf_probs)} elements, "
-                f"leaf_vocab_global has {len(leaf_vocab_global)} elements"
-            )
-        return StructuredCPSolver(
-            leaf_probs=leaf_probs,
-            leaf_vocab_global=leaf_vocab_global,
-            major_vocab_global=major_vocab_global,
-            family_vocab_global=family_vocab_global,
-            leaf_to_major=leaf_to_major_global,
-            major_to_family=major_to_family_global,
-            leaf_to_family=leaf_to_family_global,
-            m=m_scp,
-            use_fallback=use_fallback,
-            logger=logger,
-        )
-    
-    # Calibrate tau
-    logger.info("Calibrating S-CP tau...")
-    logger.info(
-        f"S-CP calibration inputs: "
-        f"n_cal_samples={probs_cal_leaf.shape[0]}, "
-        f"n_classes={probs_cal_leaf.shape[1]}, "
-        f"alpha={alpha_single}, "
-        f"target_coverage={1.0 - alpha_single:.4f}"
-    )
-    
-    # Validate calibration labels are in vocabulary
-    cal_label_vocab_overlap = np.sum(np.isin(y_cal_leaf_global, leaf_vocab_global))
-    if cal_label_vocab_overlap != len(y_cal_leaf_global):
-        logger.warning(
-            f"Calibration label-vocab mismatch: "
-            f"{cal_label_vocab_overlap}/{len(y_cal_leaf_global)} labels in vocab. "
-            "This may cause coverage issues."
-        )
-    
-    # ------------------------------------------------------------------
-    # S-CP alignment diagnostics (non-intrusive)
-    # ------------------------------------------------------------------
-    logger.info("Running S-CP alignment diagnostics on calibration data...")
-    try:
-        leaf_vocab_arr = np.asarray(leaf_vocab_global)
-        n_cal_samples = probs_cal_leaf.shape[0]
-        if n_cal_samples > 0 and leaf_vocab_arr.size > 0:
-            # Detailed check for sample 0 (mirrors the suggested debug snippet)
-            true_gid_0 = int(y_cal_leaf_global[0])
-            logger.info(f"S-CP DEBUG: sample 0 true leaf global ID: {true_gid_0}")
-            matches_0 = np.where(leaf_vocab_arr == true_gid_0)[0]
-            if matches_0.size == 0:
-                logger.warning(
-                    "S-CP DEBUG: sample 0 true leaf ID not found in leaf_vocab_global. "
-                    "This indicates a potential label/vocabulary mismatch."
-                )
-            else:
-                col_idx_0 = int(matches_0[0])
-                p_true_0 = float(probs_cal_leaf[0, col_idx_0])
-                p_max_0 = float(np.max(probs_cal_leaf[0]))
-                logger.info(
-                    "S-CP DEBUG: sample 0 alignment check -> "
-                    f"col_idx={col_idx_0}, p_true={p_true_0:.6f}, p_max_row={p_max_0:.6f}"
-                )
-
-            # Aggregate statistics over a prefix of the calibration set
-            max_n = min(100, n_cal_samples)
-            suspicious = 0
-            checked = 0
-            for i in range(max_n):
-                true_gid = int(y_cal_leaf_global[i])
-                matches = np.where(leaf_vocab_arr == true_gid)[0]
-                if matches.size == 0:
-                    # Skip samples whose label is not in vocab; these are already warned about above
-                    continue
-                col_idx = int(matches[0])
-                row_probs = probs_cal_leaf[i]
-                p_true = float(row_probs[col_idx])
-                p_max = float(np.max(row_probs))
-                checked += 1
-                if p_true < 0.05 and p_max > 0.5:
-                    suspicious += 1
-
-            if checked > 0:
-                frac = suspicious / float(checked)
-                logger.info(
-                    "S-CP DEBUG: among first "
-                    f"{checked} calibration samples with labels in vocab, "
-                    f"{suspicious} ({frac:.3f}) have p_true<0.05 and p_max>0.5."
-                )
-                if frac > 0.5:
-                    logger.warning(
-                        "S-CP DEBUG: A majority of calibration samples show low true-class "
-                        "probability while some other class has high probability. "
-                        "This strongly suggests a column–vocabulary misalignment in the "
-                        "leaf probability matrix. Please verify that the ordering of "
-                        "model outputs matches leaf_vocab_global / classes_."
-                    )
-        else:
-            logger.info(
-                "S-CP DEBUG: Skipping alignment diagnostics (no calibration samples or empty vocabulary)."
-            )
-    except Exception as e:
-        logger.warning(f"S-CP alignment diagnostics failed with exception: {e}")
-
-    cal_start_time_SCP = time.time()
-    tau_optimal, cal_info = calibrate_scp(
-        solver_factory=solver_factory,
-        probs_cal=probs_cal_leaf,
-        y_cal_global=y_cal_leaf_global,
-        alpha=alpha_single,
-        logger=logger,
-    )
-    cal_time_SCP = time.time() - cal_start_time_SCP
-    logger.info(
-        f"S-CP calibration complete: "
-        f"tau={tau_optimal:.6f}, "
-        f"coverage={cal_info.get('coverage', 'N/A'):.4f}, "
-        f"target={cal_info.get('target_coverage', 'N/A'):.4f}, "
-        f"time={cal_time_SCP:.4f}s"
-    )
-    
-    # Solve S-CP for test set
-    logger.info("Solving S-CP for test set...")
-    logger.info(
-        f"S-CP test inputs: "
-        f"n_test_samples={probs_test_leaf.shape[0]}, "
-        f"n_classes={probs_test_leaf.shape[1]}, "
-        f"tau={tau_optimal:.6f}"
-    )
-    
-    # Validate test labels are in vocabulary
-    test_label_vocab_overlap = np.sum(np.isin(y_test_leaf_global, leaf_vocab_global))
-    if test_label_vocab_overlap != len(y_test_leaf_global):
-        logger.warning(
-            f"Test label-vocab mismatch: "
-            f"{test_label_vocab_overlap}/{len(y_test_leaf_global)} labels in vocab. "
-            "This may cause evaluation issues."
-        )
-    
-    test_start_time_SCP = time.time()
-    n_test = probs_test_leaf.shape[0]
-    scp_sets_global: Dict[int, Set[int]] = {}  # sample_idx -> set of global node indices
-    
-    empty_set_count = 0
-    solver_failures = 0
-    for i in range(n_test):
-        leaf_probs = probs_test_leaf[i]
-        try:
-            solver = solver_factory(leaf_probs)
-            selected_nodes = solver.solve(tau_optimal)
-            sample_idx = int(idx_test_leaf_seen[i])
-            scp_sets_global[sample_idx] = selected_nodes
-            if len(selected_nodes) == 0:
-                empty_set_count += 1
-        except Exception as e:
-            solver_failures += 1
-            logger.error(f"S-CP solver failed for test sample {i}: {e}")
-            sample_idx = int(idx_test_leaf_seen[i])
-            scp_sets_global[sample_idx] = set()  # Empty set on failure
-            empty_set_count += 1
-    
-    test_time_SCP = time.time() - test_start_time_SCP
-    if empty_set_count > 0:
-        logger.warning(
-            f"S-CP solver returned {empty_set_count}/{n_test} empty sets "
-            f"({100.0 * empty_set_count / n_test:.1f}%)"
-        )
-    if solver_failures > 0:
-        logger.error(f"S-CP solver failed for {solver_failures}/{n_test} test samples")
-    logger.info(
-        f"S-CP sets computed: "
-        f"{n_test - empty_set_count} non-empty, "
-        f"{empty_set_count} empty, "
-        f"time={test_time_SCP:.4f}s"
-    )
-    
-    # Project S-CP sets to levels
-    logger.info("Projecting S-CP sets to Family/Major/Minor levels...")
-    
-    # Build label mappings for better validation messages
-    idx2id_map_leaf = {v: k for k, v in maps["leaf_id2idx"].items()}
-    idx2id_map_major = {v: k for k, v in maps["major_id2idx"].items()}
-    idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
-    
-    # Check if debug logging is enabled
-    debug_scp_projection = bool(input_params.get("debug_scp_projection", False))
-    
-    family_sets: Dict[int, Set[int]] = {}
-    major_sets: Dict[int, Set[int]] = {}
-    leaf_sets: Dict[int, Set[int]] = {}
-    
-    for sample_idx, scp_set in scp_sets_global.items():
-        projected = project_scp_to_levels(
-            scp_set=scp_set,
-            leaf_vocab_global=leaf_vocab_global,
-            major_vocab_global=major_vocab_global,
-            family_vocab_global=family_vocab_global,
-            leaf_to_major=leaf_to_major_global,
-            major_to_family=major_to_family_global,
-            leaf_to_family=leaf_to_family_global,
-            logger=logger,
-            idx2id_map_leaf=idx2id_map_leaf,
-            idx2id_map_major=idx2id_map_major,
-            idx2id_map_family=idx2id_map_family,
-            debug=debug_scp_projection,
-        )
-        family_sets[sample_idx] = projected["family"]
-        major_sets[sample_idx] = projected["major"]
-        leaf_sets[sample_idx] = projected["leaf"]
-    
-    # Log projection summary statistics
-    if scp_sets_global:
-        avg_family_size = np.mean([len(family_sets.get(sid, set())) for sid in scp_sets_global.keys()])
-        avg_major_size = np.mean([len(major_sets.get(sid, set())) for sid in scp_sets_global.keys()])
-        avg_leaf_size = np.mean([len(leaf_sets.get(sid, set())) for sid in scp_sets_global.keys()])
-        empty_family_count = sum(1 for sid in scp_sets_global.keys() if len(family_sets.get(sid, set())) == 0)
-        empty_major_count = sum(1 for sid in scp_sets_global.keys() if len(major_sets.get(sid, set())) == 0)
-        empty_leaf_count = sum(1 for sid in scp_sets_global.keys() if len(leaf_sets.get(sid, set())) == 0)
-        
-        logger.info(
-            f"S-CP projection summary: "
-            f"avg_set_sizes: family={avg_family_size:.2f}, major={avg_major_size:.2f}, leaf={avg_leaf_size:.2f}, "
-            f"empty_sets: family={empty_family_count}/{len(scp_sets_global)}, "
-            f"major={empty_major_count}/{len(scp_sets_global)}, "
-            f"leaf={empty_leaf_count}/{len(scp_sets_global)}"
-        )
-    
-    # Build local mappings for evaluation
-    # Use integer keys to match the types in projected sets
-    leaf_g2l = {int(g): i for i, g in enumerate(leaf_vocab_global)}
-    major_g2l = {int(g): i for i, g in enumerate(major_vocab_global)}
-    family_g2l = {int(g): i for i, g in enumerate(family_vocab_global)}
-    
-    # Convert sets to boolean masks for evaluation
-    n_leaves = len(leaf_vocab_global)
-    n_majors = len(major_vocab_global)
-    n_families = len(family_vocab_global)
-    
-    keep_leaf_bool = np.zeros((n_test, n_leaves), dtype=bool)
-    keep_major_bool = np.zeros((n_test, n_majors), dtype=bool)
-    keep_family_bool = np.zeros((n_test, n_families), dtype=bool)
-    
-    for i, sample_idx in enumerate(idx_test_leaf_seen):
-        # Leaf level - ensure integer type for dictionary lookup
-        for leaf_gid in leaf_sets.get(int(sample_idx), set()):
-            leaf_gid_int = int(leaf_gid)
-            if leaf_gid_int in leaf_g2l:
-                keep_leaf_bool[i, leaf_g2l[leaf_gid_int]] = True
-        
-        # Major level - ensure integer type for dictionary lookup
-        for major_gid in major_sets.get(int(sample_idx), set()):
-            major_gid_int = int(major_gid)
-            if major_gid_int in major_g2l:
-                keep_major_bool[i, major_g2l[major_gid_int]] = True
-        
-        # Family level - ensure integer type for dictionary lookup
-        for family_gid in family_sets.get(int(sample_idx), set()):
-            family_gid_int = int(family_gid)
-            if family_gid_int in family_g2l:
-                keep_family_bool[i, family_g2l[family_gid_int]] = True
-    
-    # Get true labels for evaluation
-    # Convert to int for dictionary lookup consistency
-    y_leaf_local = np.array([leaf_g2l[int(g)] for g in y_test_leaf_global], dtype="int64")
-    
-    y_test_major_global = df.iloc[idx_test_leaf_seen]["major_idx"].astype("Int64").values
-    maj_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in major_g2l 
-                                 for g in y_test_major_global])
-    y_test_major_global_filtered = y_test_major_global[maj_in_vocab_mask]
-    y_major_local = np.array([major_g2l[int(g)] for g in y_test_major_global_filtered], dtype="int64")
-    keep_major_bool_filtered = keep_major_bool[maj_in_vocab_mask]
-    
-    y_test_family_global = df.iloc[idx_test_leaf_seen]["family_idx"].astype("Int64").values
-    fam_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in family_g2l 
-                                 for g in y_test_family_global])
-    y_test_family_global_filtered = y_test_family_global[fam_in_vocab_mask]
-    y_family_local = np.array([family_g2l[int(g)] for g in y_test_family_global_filtered], dtype="int64")
-    keep_family_bool_filtered = keep_family_bool[fam_in_vocab_mask]
-    
-    # Evaluate S-CP
-    metrics_SCP_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
-    metrics_SCP_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
-    metrics_SCP_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
-    # test_time_SCP already computed above after solving
-    logger.info(f"S-CP evaluation: num_test_samples={n_test}, time={test_time_SCP:.4f}s")
-    
-    # Compute top1_acc_non_empty and base_top1_acc
-    if keep_leaf_bool.shape[0] > 0:
-        # Base top1: argmax from all probs
-        base_top1_leaf = probs_test_leaf.argmax(axis=1)
-        metrics_SCP_leaf["base_top1_acc"] = float(np.mean(base_top1_leaf == y_leaf_local))
-        
-        # Top1 within set: argmax from masked probs
-        masked_probs_leaf = np.where(keep_leaf_bool, probs_test_leaf, -np.inf)
-        top1_leaf = masked_probs_leaf.argmax(axis=1)
-        non_empty_leaf = keep_leaf_bool.sum(axis=1) > 0
-        if np.any(non_empty_leaf):
-            metrics_SCP_leaf["top1_acc_non_empty"] = float(np.mean((top1_leaf[non_empty_leaf] == y_leaf_local[non_empty_leaf])))
-        else:
-            metrics_SCP_leaf["top1_acc_non_empty"] = float("nan")
-        
-        # Map to global for major/family calculations
-        base_top1_leaf_global = np.array([leaf_vocab_global[base_top1_leaf[i]] for i in range(len(base_top1_leaf))])
-        top1_leaf_global = np.array([leaf_vocab_global[top1_leaf[i]] for i in range(len(top1_leaf))])
-    else:
-        metrics_SCP_leaf["top1_acc_non_empty"] = float("nan")
-        metrics_SCP_leaf["base_top1_acc"] = float("nan")
-        base_top1_leaf_global = None
-        top1_leaf_global = None
-    
-    # Major level top1
-    if keep_major_bool_filtered.shape[0] > 0 and base_top1_leaf_global is not None:
-        base_top1_major_global = np.array([
-            leaf_to_major_global.get(int(g), None) if g is not None else None
-            for g in base_top1_leaf_global
-        ])
-        maj_valid_mask = (maj_in_vocab_mask & 
-                         np.array([g is not None and int(g) in major_g2l for g in base_top1_major_global]))
-        if np.any(maj_valid_mask):
-            base_top1_major_local = np.array([major_g2l[int(g)] for g in base_top1_major_global[maj_valid_mask]], dtype="int64")
-            y_major_local_valid = y_major_local[maj_valid_mask[maj_in_vocab_mask]]
-            metrics_SCP_major["base_top1_acc"] = float(np.mean(base_top1_major_local == y_major_local_valid))
-        else:
-            metrics_SCP_major["base_top1_acc"] = float("nan")
-        
-        if top1_leaf_global is not None:
-            top1_major_global = np.array([
-                leaf_to_major_global.get(int(g), None) if g is not None else None
-                for g in top1_leaf_global
-            ])
-            maj_valid_mask = (maj_in_vocab_mask & 
-                             np.array([g is not None and int(g) in major_g2l for g in top1_major_global]))
-            maj_in_set_mask = maj_valid_mask & (keep_major_bool.sum(axis=1) > 0)
-            if np.any(maj_in_set_mask):
-                top1_major_local = np.array([major_g2l[int(g)] for g in top1_major_global[maj_in_set_mask]], dtype="int64")
-                y_major_local_in_set = y_major_local[maj_in_set_mask[maj_in_vocab_mask]]
-                metrics_SCP_major["top1_acc_non_empty"] = float(np.mean(top1_major_local == y_major_local_in_set))
-            else:
-                metrics_SCP_major["top1_acc_non_empty"] = float("nan")
-        else:
-            metrics_SCP_major["top1_acc_non_empty"] = float("nan")
-    else:
-        metrics_SCP_major["top1_acc_non_empty"] = float("nan")
-        metrics_SCP_major["base_top1_acc"] = float("nan")
-    
-    # Family level top1
-    if keep_family_bool_filtered.shape[0] > 0 and base_top1_leaf_global is not None:
-        base_top1_family_global = np.array([
-            leaf_to_family_global.get(int(g), None) if g is not None else None
-            for g in base_top1_leaf_global
-        ])
-        fam_valid_mask = (fam_in_vocab_mask & 
-                         np.array([g is not None and int(g) in family_g2l for g in base_top1_family_global]))
-        if np.any(fam_valid_mask):
-            base_top1_family_local = np.array([family_g2l[int(g)] for g in base_top1_family_global[fam_valid_mask]], dtype="int64")
-            y_family_local_valid = y_family_local[fam_valid_mask[fam_in_vocab_mask]]
-            metrics_SCP_family["base_top1_acc"] = float(np.mean(base_top1_family_local == y_family_local_valid))
-        else:
-            metrics_SCP_family["base_top1_acc"] = float("nan")
-        
-        if top1_leaf_global is not None:
-            top1_family_global = np.array([
-                leaf_to_family_global.get(int(g), None) if g is not None else None
-                for g in top1_leaf_global
-            ])
-            fam_valid_mask = (fam_in_vocab_mask & 
-                             np.array([g is not None and int(g) in family_g2l for g in top1_family_global]))
-            fam_in_set_mask = fam_valid_mask & (keep_family_bool.sum(axis=1) > 0)
-            if np.any(fam_in_set_mask):
-                top1_family_local = np.array([family_g2l[int(g)] for g in top1_family_global[fam_in_set_mask]], dtype="int64")
-                y_family_local_in_set = y_family_local[fam_in_set_mask[fam_in_vocab_mask]]
-                metrics_SCP_family["top1_acc_non_empty"] = float(np.mean(top1_family_local == y_family_local_in_set))
-            else:
-                metrics_SCP_family["top1_acc_non_empty"] = float("nan")
-        else:
-            metrics_SCP_family["top1_acc_non_empty"] = float("nan")
-    else:
-        metrics_SCP_family["top1_acc_non_empty"] = float("nan")
-        metrics_SCP_family["base_top1_acc"] = float("nan")
-    
-    # Compute HIR (should be 0.0 for S-CP due to projection)
-    hir_rate_SCP = compute_hir_rate(
-        family_sets,
-        major_sets,
-        leaf_sets,
-        leaf_to_major_global,
-        major_to_family_global,
-    )
-    metrics_SCP_family["hir"] = hir_rate_SCP
-    
-    # Prepare labels for artifacts
-    idx2id_map_leaf = {v: k for k, v in maps["leaf_id2idx"].items()}
-    class_labels_leaf = [str(idx2id_map_leaf.get(int(gidx), str(int(gidx)))) for gidx in leaf_vocab_global]
-    
-    idx2id_map_major = {v: k for k, v in maps["major_id2idx"].items()}
-    class_labels_major = [str(idx2id_map_major.get(int(gidx), str(int(gidx)))) for gidx in major_vocab_global]
-    
-    idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
-    class_labels_family = [str(idx2id_map_family.get(int(gidx), str(int(gidx)))) for gidx in family_vocab_global]
-    
-    # Save S-CP artifacts (using same format as B)
-    def save_scp_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: float, run_idx: int):
-        os.makedirs(out_dir_target, exist_ok=True)
-        json_path = os.path.join(out_dir_target, f"SCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json")
-        csv_path = os.path.join(out_dir_target, f"SCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.csv")
-        with open(json_path, "w") as f:
-            json.dump(summary, f, indent=2)
-        flat = {k: v for k, v in summary.items() if not isinstance(v, (list, dict))}
-        pd.DataFrame([flat]).to_csv(csv_path, index=False)
-    
-    # Leaf summary
-    summary_SCP_leaf = {
-        "level": "leaf",
-        "alpha_SCP": alpha_single,
-        "tau": tau_optimal,
-        "m": m_scp,
-        "calibration_info": cal_info,
-        "metrics": metrics_SCP_leaf,
-        "num_test_defined": int(len(idx_test_leaf_defined)),
-        "num_test_used": int(y_leaf_local.shape[0]),
-        "class_labels": class_labels_leaf,
-    }
-    save_scp_cp_artifacts(out_dir_SCP, "leaf", summary_SCP_leaf, alpha_single, run_idx)
-    logger.info(f"Saved Baseline S-CP CP summary for leaf -> {out_dir_SCP}/SCP_alpha_{alpha_single}_run_{run_idx}_cp_leaf_summary.json")
-    
-    # Major summary
-    summary_SCP_major = {
-        "level": "major",
-        "alpha_SCP": alpha_single,
-        "tau": tau_optimal,
-        "m": m_scp,
-        "calibration_info": cal_info,
-        "metrics": metrics_SCP_major,
-        "num_test_defined": int(len(idx_test_leaf_defined)),
-        "num_test_used": int(y_major_local.shape[0]),
-        "class_labels": class_labels_major,
-    }
-    save_scp_cp_artifacts(out_dir_SCP, "major", summary_SCP_major, alpha_single, run_idx)
-    logger.info(f"Saved Baseline S-CP CP summary for major -> {out_dir_SCP}/SCP_alpha_{alpha_single}_run_{run_idx}_cp_major_summary.json")
-    
-    # Family summary
-    summary_SCP_family = {
-        "level": "family",
-        "alpha_SCP": alpha_single,
-        "tau": tau_optimal,
-        "m": m_scp,
-        "calibration_info": cal_info,
-        "metrics": metrics_SCP_family,
-        "num_test_defined": int(len(idx_test_leaf_defined)),
-        "num_test_used": int(y_family_local.shape[0]),
-        "class_labels": class_labels_family,
-    }
-    save_scp_cp_artifacts(out_dir_SCP, "family", summary_SCP_family, alpha_single, run_idx)
-    logger.info(f"Saved Baseline S-CP CP summary for family -> {out_dir_SCP}/SCP_alpha_{alpha_single}_run_{run_idx}_cp_family_summary.json")
-    
-    # Build per-sample details for S-CP
-    levels = ["family", "major", "leaf"]
-    per_level_details_SCP = {"family": {}, "major": {}, "leaf": {}}
-    
-    for i, global_row_idx in enumerate(idx_test_leaf_seen):
-        # Leaf level
-        leaf_pred_label = base_pred_labels_from_A.get("leaf", {}).get(int(global_row_idx), "")
-        leaf_true_label = str(idx2id_map_leaf.get(int(y_test_leaf_global[i]), str(int(y_test_leaf_global[i])))) if pd.notna(y_test_leaf_global[i]) else ""
-        leaf_set_labels = [str(idx2id_map_leaf.get(int(g), str(int(g)))) for g in leaf_sets.get(int(global_row_idx), set())]
-        per_level_details_SCP["leaf"][int(global_row_idx)] = {
-            "true_leaf": leaf_true_label,
-            "pred_leaf": leaf_pred_label,
-            "set_leaf": "|".join(leaf_set_labels),
-        }
-        
-        # Major level
-        if pd.notna(y_test_major_global[i]):
-            major_pred_label = base_pred_labels_from_A.get("major", {}).get(int(global_row_idx), "")
-            major_true_label = str(idx2id_map_major.get(int(y_test_major_global[i]), str(int(y_test_major_global[i]))))
-            major_set_labels = [str(idx2id_map_major.get(int(g), str(int(g)))) for g in major_sets.get(int(global_row_idx), set())]
-            per_level_details_SCP["major"][int(global_row_idx)] = {
-                "true_major": major_true_label,
-                "pred_major": major_pred_label,
-                "set_major": "|".join(major_set_labels),
-            }
-        
-        # Family level
-        if pd.notna(y_test_family_global[i]):
-            family_pred_label = base_pred_labels_from_A.get("family", {}).get(int(global_row_idx), "")
-            family_true_label = str(idx2id_map_family.get(int(y_test_family_global[i]), str(int(y_test_family_global[i]))))
-            family_set_labels = [str(idx2id_map_family.get(int(g), str(int(g)))) for g in family_sets.get(int(global_row_idx), set())]
-            per_level_details_SCP["family"][int(global_row_idx)] = {
-                "true_family": family_true_label,
-                "pred_family": family_pred_label,
-                "set_family": "|".join(family_set_labels),
-            }
-    
-    # Merge per-level details into DataFrame
-    test_indices_with_predictions_SCP = set()
-    for lvl in levels:
-        test_indices_with_predictions_SCP.update(per_level_details_SCP[lvl].keys())
-    test_indices_sorted_SCP = sorted([int(i) for i in test_indices_with_predictions_SCP])
-    rows_SCP = []
-    for idx in test_indices_sorted_SCP:
-        if idx not in idx_test_leaf_defined:
-            continue
-        row = {"index": idx}
-        for lvl in levels:
-            det = per_level_details_SCP[lvl].get(idx, {})
-            row.update({
-                f"true_{lvl}": det.get(f"true_{lvl}", ""),
-                f"pred_{lvl}": det.get(f"pred_{lvl}", ""),
-                f"set_{lvl}": det.get(f"set_{lvl}", ""),
-            })
-        rows_SCP.append(row)
-    if rows_SCP:
-        details_df_SCP = pd.DataFrame(rows_SCP).set_index("index").sort_index()
-        details_csv_SCP = os.path.join(out_dir_SCP, f"SCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
-        details_df_SCP.to_csv(details_csv_SCP)
-        logger.info(f"Saved per-sample run details for Baseline S-CP (test set only) -> {details_csv_SCP}")
-    
-    logger.info("Baseline S-CP one-shot CP experiment completed")
-
-
-def run_baseline_a_one_shot(
+def run_lwcp_one_shot(
     logger: logging.Logger,
     df: pd.DataFrame,
     maps: Dict,
     input_params: Dict,
     out_dir: str,
     bundle_per_level: Dict[str, Dict],
-    out_dir_B: Optional[str] = None,
+    out_dir_LoUPCP: Optional[str] = None,
 ):
     seed = int(input_params.get("seed", 42))
 
-    # Read baseline configuration
-    baselines = input_params.get("baselines", ["A"])
-    if isinstance(baselines, str):
-        baselines = [baselines]
-    compute_B = "B" in baselines
-    compute_SCP = "SCP" in baselines or "S-CP" in baselines
-    if compute_B:
-        logger.info("Baseline B enabled: will compute leaf-only CP with upward projection")
-    if compute_SCP:
-        logger.info("Baseline S-CP enabled: will compute Structured Conformal Prediction")
+    # Read method configuration
+    methods = input_params.get("methods", ["LwCP"])
+    if isinstance(methods, str):
+        methods = [methods]
+    compute_LoUPCP = "LoUPCP" in methods
+    if compute_LoUPCP:
+        logger.info("LoUP-CP enabled: will compute leaf-only CP with upward projection")
 
     # Ensure ancestor consistency before any split
     df = ensure_ancestor_consistency(df, maps, logger)
 
-    # Build hierarchy mappings for HIR and Baseline B
+    # Build hierarchy mappings for HIR and LoUP-CP
     leaf_to_major_global, major_to_family_global, leaf_to_family_global = build_hierarchy_mappings(df, logger)
 
     # Build masks for defined labels (handle token-based undefined where available)
@@ -1702,7 +1046,7 @@ def run_baseline_a_one_shot(
     per_level_details: Dict[str, Dict[int, Dict[str, str]]] = {lvl: {} for lvl in levels}
     per_level_sets_global: Dict[str, Dict[int, set]] = {lvl: {} for lvl in levels}
     
-    # For Baseline B and S-CP: collect vocabs and leaf model artifacts
+    # For LoUP-CP: collect vocabs and leaf model artifacts
     family_vocab_global = None
     major_vocab_global = None
     leaf_vocab_global = None
@@ -1799,8 +1143,8 @@ def run_baseline_a_one_shot(
             f"Calibration: level={level}, m_k={m_k}, j={j_k}, step={step_k:.6f}, q_hat={q_hat:.6f}, time={cal_time:.4f}s"
         )
 
-        # Baseline B and S-CP capture (leaf only)
-        if (compute_B or compute_SCP) and level == "leaf":
+        # LoUP-CP capture (leaf only)
+        if compute_LoUPCP and level == "leaf":
             q_hat_leaf = q_hat
             m_leaf = m_k
             probs_test_leaf = probs_test
@@ -1812,34 +1156,9 @@ def run_baseline_a_one_shot(
             y_test_leaf_global_aligned = y_test_global[test_seen_mask]
             y_cal_leaf_global_aligned = y_cal_global[cal_seen_mask]
             leaf_vocab_global = classes_global
-            
-            # Log alignment information for S-CP
-            logger.info(
-                f"Leaf level alignment for S-CP: "
-                f"vocab_size={len(leaf_vocab_global)}, "
-                f"probs_cal_shape={probs_cal_leaf.shape}, "
-                f"probs_test_shape={probs_test_leaf.shape}, "
-                f"n_cal_samples={len(y_cal_leaf_global_aligned)}, "
-                f"n_test_samples={len(y_test_leaf_global_aligned)}"
-            )
-            
-            # Validate that all calibration/test labels are in vocabulary
-            cal_labels_in_vocab = np.sum(np.isin(y_cal_leaf_global_aligned, leaf_vocab_global))
-            test_labels_in_vocab = np.sum(np.isin(y_test_leaf_global_aligned, leaf_vocab_global))
-            
-            if cal_labels_in_vocab != len(y_cal_leaf_global_aligned):
-                logger.warning(
-                    f"Some calibration labels not in vocabulary: "
-                    f"{cal_labels_in_vocab}/{len(y_cal_leaf_global_aligned)} labels found in vocab"
-                )
-            if test_labels_in_vocab != len(y_test_leaf_global_aligned):
-                logger.warning(
-                    f"Some test labels not in vocabulary: "
-                    f"{test_labels_in_vocab}/{len(y_test_leaf_global_aligned)} labels found in vocab"
-                )
-        elif (compute_B or compute_SCP) and level == "major":
+        elif compute_LoUPCP and level == "major":
             major_vocab_global = classes_global
-        elif (compute_B or compute_SCP) and level == "family":
+        elif compute_LoUPCP and level == "family":
             family_vocab_global = classes_global
 
         # Warn on tiny calibration set
@@ -1947,7 +1266,7 @@ def run_baseline_a_one_shot(
                     break
         except Exception:
             pass
-        details_csv = os.path.join(out_dir, f"A_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
+        details_csv = os.path.join(out_dir, f"LwCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
         details_df.to_csv(details_csv)
         logger.info(f"Saved per-sample run details (test set only) -> {details_csv}")
 
@@ -1976,16 +1295,16 @@ def run_baseline_a_one_shot(
     else:
         logger.warning("HIR could not be computed (insufficient overlapping samples)")
 
-    logger.info("Baseline A one-shot CP experiment completed")
+    logger.info("Lw-CP one-shot CP experiment completed")
     
-    # Build mapping of A base predictions per level for reuse in B and S-CP run_details
-    base_pred_labels_from_A: Dict[str, Dict[int, str]] = {
+    # Build mapping of Lw-CP base predictions per level for reuse in LoUP-CP run_details
+    base_pred_labels_from_LwCP: Dict[str, Dict[int, str]] = {
         lvl: {idx: det.get(f"pred_{lvl}", "") for idx, det in per_level_details[lvl].items()} for lvl in levels
     }
     
-    # Baseline B: Leaf-only CP with upward closure
-    if compute_B:
-        run_baseline_b(
+    # LoUP-CP: Leaf-only CP with upward closure
+    if compute_LoUPCP:
+        run_loupcp(
             df=df,
             maps=maps,
             input_params=input_params,
@@ -2000,56 +1319,9 @@ def run_baseline_a_one_shot(
             idx_test_leaf_seen=idx_test_leaf_seen,
             y_test_leaf_global_aligned=y_test_leaf_global_aligned,
             alpha_single=alpha_single,
-            base_pred_labels_from_A=base_pred_labels_from_A,
+            base_pred_labels_from_LwCP=base_pred_labels_from_LwCP,
             logger=logger,
-            out_dir_B=out_dir_B,
-        )
-    
-    # Baseline S-CP: Structured Conformal Prediction
-    if compute_SCP:
-        # Construct S-CP directory
-        # Extract base directory and run_idx from out_dir
-        norm_out = os.path.normpath(out_dir)
-        run_idx = 1
-        try:
-            for part in norm_out.split(os.sep):
-                if part.startswith("run_") and len(part) > 4:
-                    run_idx = int(part[4:])
-                    break
-        except Exception:
-            pass
-        
-        # Get base output directory (parent of baseline_A)
-        base_out_dir = os.path.dirname(os.path.dirname(os.path.dirname(norm_out)))
-        baseline_SCP_exec_dir = os.path.join(base_out_dir, "baseline_SCP")
-        os.makedirs(baseline_SCP_exec_dir, exist_ok=True)
-        alpha_dir_SCP_exec = os.path.join(baseline_SCP_exec_dir, f"alpha_{float(alpha_single)}")
-        os.makedirs(alpha_dir_SCP_exec, exist_ok=True)
-        out_dir_SCP = os.path.join(alpha_dir_SCP_exec, f"run_{run_idx}")
-        os.makedirs(out_dir_SCP, exist_ok=True)
-        
-        run_baseline_scp(
-            df=df,
-            maps=maps,
-            input_params=input_params,
-            out_dir=out_dir,
-            leaf_vocab_global=leaf_vocab_global,
-            major_vocab_global=major_vocab_global,
-            family_vocab_global=family_vocab_global,
-            leaf_to_major_global=leaf_to_major_global,
-            major_to_family_global=major_to_family_global,
-            leaf_to_family_global=leaf_to_family_global,
-            probs_test_leaf=probs_test_leaf,
-            probs_cal_leaf=probs_cal_leaf,
-            y_test_leaf_global=y_test_leaf_global_aligned,
-            y_cal_leaf_global=y_cal_leaf_global_aligned,
-            idx_test_leaf_defined=idx_test_leaf_defined,
-            idx_test_leaf_seen=idx_test_leaf_seen,
-            idx_cal_leaf_seen=idx_cal_leaf_seen,
-            alpha_single=alpha_single,
-            base_pred_labels_from_A=base_pred_labels_from_A,
-            logger=logger,
-            out_dir_SCP=out_dir_SCP,
+            out_dir_LoUPCP=out_dir_LoUPCP,
         )
 
 

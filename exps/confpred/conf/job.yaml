@@ -1,10 +1,10 @@
 title: "CP-HOSfing - Conformal Prediction"
-description: "Code for conformal prediction approaches: baseline A (per-level), baseline B (leaf-level only) and S-CP"
+description: "Code for conformal prediction approaches: Lw-CP (per-level), LoUP-CP (leaf-level only)"
 
 # Debugging
 slurm:
   # time: "1-00:00:00"
-  time: "6:00:00"
+  time: "2:00:00"
   cpus: 16
   mem_per_cpu: "1GB"
   gpus: 0

@@ -2,7 +2,7 @@
 dataset_caltest_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_CALTEST.csv
 maps_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/maps.plk
 artifacts_path: /home/ulc/co/rpj/projects/CP-HOSfing/exps/predictors/artifacts
-seed: 42
+seed: 2026
 
 # GPU Configuration
 use_amp: true              # Enable automatic mixed precision training
@@ -10,18 +10,13 @@ num_workers: 4             # Number of data loading workers (0 for CPU, 4+ for G
 use_multi_gpu: true        # Enable multi-GPU training with DataParallel
 
 # Experiment selection
-# baselines: ["A", "B", "S-CP"]
-baselines: ["A", "B"]
+# methods: ["LwCP", "LoUPCP"]
+methods: ["LwCP", "LoUPCP"]
 
 # Split proportions for Cal/Test (70% already used for Train)
 split_proportions:
   cal: 0.5
   test: 0.5
-
-# S-CP
-# scp_m: 1000  # Maximum number of nodes in prediction set (default: 4)
-# scp_use_fallback: false  # If true, return all families on solver failure (pragmatic). If false, return empty set (rigorous).
-# debug_scp_projection: true
 
 # DEBUGGING
 # FALSE

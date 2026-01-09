@@ -152,38 +152,38 @@ def copy_artifact_file(src: str, dst: str, logger: logging.Logger) -> bool:
 
 
 def split_and_rename_artifacts(run_dir: str, out_dir: str, alpha: float, run_idx: int, 
-                                baseline: str, baselines_to_aggregate: list, logger: logging.Logger) -> None:
-    """Rename and organize baseline A artifacts into baseline-specific trees with full-trace filenames.
+                                method: str, methods_to_aggregate: list, logger: logging.Logger) -> None:
+    """Rename and organize Lw-CP artifacts into method-specific trees with full-trace filenames.
     
-    Note: Baseline B files are now generated directly in their correct location, so this function
-    only handles baseline A file renaming and organization.
+    Note: LoUP-CP files are now generated directly in their correct location, so this function
+    only handles Lw-CP file renaming and organization.
     
     Args:
-        run_dir: Source run directory (where baseline A files are generated)
+        run_dir: Source run directory (where Lw-CP files are generated)
         out_dir: Root output directory
         alpha: Alpha value
         run_idx: Run index
-        baseline: Baseline being executed (A or B)
-        baselines_to_aggregate: List of baselines to aggregate
+        method: Method being executed (LwCP or LoUPCP)
+        methods_to_aggregate: List of methods to aggregate
         logger: Logger instance
     """
     # Ensure alpha is float for consistent formatting (0 -> 0.0, not "0")
     alpha = float(alpha)
     levels = ["family", "major", "leaf"]
     
-    # Only process baseline A files (baseline B files are already in correct location)
-    if "A" not in baselines_to_aggregate:
+    # Only process Lw-CP files (LoUP-CP files are already in correct location)
+    if "LwCP" not in methods_to_aggregate:
         return
     
-    run_dir_A = os.path.join(out_dir, f"baseline_A", f"alpha_{alpha}", f"run_{run_idx}")
-    os.makedirs(run_dir_A, exist_ok=True)
+    run_dir_LwCP = os.path.join(out_dir, f"method_LwCP", f"alpha_{alpha}", f"run_{run_idx}")
+    os.makedirs(run_dir_LwCP, exist_ok=True)
     
-    # Rename baseline A summary files (from cp_* to A_alpha_*_run_*_cp_*)
+    # Rename Lw-CP summary files (from cp_* to LwCP_alpha_*_run_*_cp_*)
     for level in levels:
         for ext in ("csv", "json"):
             src = os.path.join(run_dir, f"cp_{level}_summary.{ext}")
             if os.path.exists(src):
-                dst = os.path.join(run_dir_A, f"A_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}")
+                dst = os.path.join(run_dir_LwCP, f"LwCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}")
                 # Check if source and destination are the same before copying
                 src_normalized = os.path.abspath(os.path.normpath(src))
                 dst_normalized = os.path.abspath(os.path.normpath(dst))
@@ -195,10 +195,10 @@ def split_and_rename_artifacts(run_dir: str, out_dir: str, alpha: float, run_idx
                         except OSError:
                             pass
 
-    # Rename baseline A test samples details file
-    src_new_details = os.path.join(run_dir, f"A_alpha_{alpha}_run_{run_idx}_test_samples.csv")
+    # Rename Lw-CP test samples details file
+    src_new_details = os.path.join(run_dir, f"LwCP_alpha_{alpha}_run_{run_idx}_test_samples.csv")
     src_legacy_details = os.path.join(run_dir, "run_details.csv")
-    dst_details = os.path.join(run_dir_A, f"A_alpha_{alpha}_run_{run_idx}_test_samples.csv")
+    dst_details = os.path.join(run_dir_LwCP, f"LwCP_alpha_{alpha}_run_{run_idx}_test_samples.csv")
 
     if os.path.exists(src_new_details):
         # Check if source and destination are the same before copying

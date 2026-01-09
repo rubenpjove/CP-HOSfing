@@ -151,14 +151,15 @@ def plot_aggregate_lines(out_dir: str, cross_alpha_csv: str):
 
 
 def plot_ab_comparison(ab_dir: str, combined_csv: str):
-    """Generate AB comparison plots: per metric, overlay 3 levels (colors) and 2 baselines (linestyles).
+    """Generate method comparison plots: per metric, overlay 3 levels (colors) and 2 methods (linestyles).
     
-    Expects: combined_csv with columns: baseline, alpha, level, metric, mean, std
-    Saves to: ab_dir/plots/AB_{metric}_mean_std_across_levels.{png,svg}
+    Expects: combined_csv with columns: method, alpha, level, metric, mean, std
+    Saves to: ab_dir/plots/{methods}_{metric}_mean_std_across_levels.{png,svg}
+    where {methods} is the methods joined by "-" (e.g., "LwCP-LoUPCP")
     
     Args:
-        ab_dir: Directory for AB aggregated results (plots subdirectory will be created)
-        combined_csv: Path to metrics_across_alphas_by_baseline.csv
+        ab_dir: Directory for methods aggregated results (plots subdirectory will be created)
+        combined_csv: Path to metrics_across_alphas_by_method.csv
     """
     try:
         df_combined = pd.read_csv(combined_csv)
@@ -170,33 +171,35 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
     
     # Ensure numeric alpha for sorting
     df_combined["alpha"] = df_combined["alpha"].astype(float)
-    baselines_present = sorted(df_combined["baseline"].dropna().unique().tolist())
-    # Baseline colors; line styles encode levels
-    baseline_color_map = {"A": "#1f77b4", "B": "#2ca02c", "SCP": "#d62728"}
+    # Handle both "baseline" and "method" column names for backward compatibility
+    method_col = "method" if "method" in df_combined.columns else "baseline"
+    methods_present = sorted(df_combined[method_col].dropna().unique().tolist())
+    # Create method prefix for filenames (e.g., "LwCP-LoUPCP")
+    methods_prefix = "-".join(methods_present)
+    # Method colors; line styles encode levels
+    method_color_map = {"LwCP": "#1f77b4", "LoUPCP": "#2ca02c"}
     level_linestyle_map = {"family": "-", "major": "--", "leaf": ":"}
     
-    def format_baseline_label(baseline: str) -> str:
-        """Format baseline name for display."""
-        if baseline == "SCP":
-            return "S-CP"
-        elif baseline == "A":
-            return "L-CP"
-        elif baseline == "B":
-            return "BU-CP"
-        return f"Baseline {baseline}"
+    def format_method_label(method: str) -> str:
+        """Format method name for display."""
+        if method == "LwCP":
+            return "Lw-CP"
+        elif method == "LoUPCP":
+            return "LoUP-CP"
+        return f"Method {method}"
     
     for metric in METRIC_KEYS:
         plt.figure(figsize=(9, 5))
         plotted_any = False
 
-        # Special handling for HIR: one line per baseline (no per-level breakdown)
+        # Special handling for HIR: one line per method (no per-level breakdown)
         if metric == "hir":
-            for bl in baselines_present:
-                df_m = df_combined[(df_combined["metric"] == metric) & (df_combined["baseline"] == bl)].copy()
+            for m in methods_present:
+                df_m = df_combined[(df_combined["metric"] == metric) & (df_combined[method_col] == m)].copy()
                 if df_m.empty:
                     continue
                 df_m = df_m.sort_values("alpha")
-                # If multiple levels exist, aggregate across levels for this baseline/alpha
+                # If multiple levels exist, aggregate across levels for this method/alpha
                 df_m = (
                     df_m.groupby("alpha", as_index=False)
                     .agg({"mean": "mean", "std": "mean"})
@@ -205,8 +208,8 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
                 alphas = df_m["alpha"].values
                 means = df_m["mean"].values
                 stds = df_m["std"].values
-                color = baseline_color_map.get(bl, "#1f77b4")
-                label = format_baseline_label(bl)
+                color = method_color_map.get(m, "#1f77b4")
+                label = format_method_label(m)
                 plt.plot(alphas, means, linestyle="-", color=color, label=label)
                 lower = np.where(np.isfinite(stds), means - stds, np.nan)
                 upper = np.where(np.isfinite(stds), means + stds, np.nan)
@@ -229,21 +232,21 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
             plt.title(formatted_metric)
             plt.legend(ncol=1)
             plt.grid(True, linestyle=":", linewidth=0.5)
-            base_name = f"AB_{metric}_mean_std_across_levels"
+            base_name = f"{methods_prefix}_{metric}_mean_std_across_levels"
             plt.tight_layout()
             plt.savefig(os.path.join(plots_dir, base_name + ".svg"))
             plt.savefig(os.path.join(plots_dir, base_name + ".png"), dpi=150)
             plt.close()
             continue
 
-        # Default: per-level lines with per-baseline styles (same for all metrics including coverage)
-        for bl in baselines_present:
-            color = baseline_color_map.get(bl, "#1f77b4")
+        # Default: per-level lines with per-method styles (same for all metrics including coverage)
+        for m in methods_present:
+            color = method_color_map.get(m, "#1f77b4")
             for level in LEVELS:
                 df_m = df_combined[
                     (df_combined["level"] == level)
                     & (df_combined["metric"] == metric)
-                    & (df_combined["baseline"] == bl)
+                    & (df_combined[method_col] == m)
                 ].copy()
                 if df_m.empty:
                     continue
@@ -251,8 +254,8 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
                 alphas = df_m["alpha"].values
                 means = df_m["mean"].values
                 stds = df_m["std"].values
-                baseline_label = format_baseline_label(bl)
-                label = f"{level} ({baseline_label})"
+                method_label = format_method_label(m)
+                label = f"{level} ({method_label})"
                 linestyle = level_linestyle_map.get(level, "-")
                 plt.plot(alphas, means, linestyle=linestyle, color=color, label=label)
                 lower = np.where(np.isfinite(stds), means - stds, np.nan)
@@ -290,7 +293,7 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
         plt.legend(ncol=2)
         
         plt.grid(True, linestyle=":", linewidth=0.5)
-        base_name = f"AB_{metric}_mean_std_across_levels"
+        base_name = f"{methods_prefix}_{metric}_mean_std_across_levels"
         plt.tight_layout()
         plt.savefig(os.path.join(plots_dir, base_name + ".svg"))
         plt.savefig(os.path.join(plots_dir, base_name + ".png"), dpi=150)

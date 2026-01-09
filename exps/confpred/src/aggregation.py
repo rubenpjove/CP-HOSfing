@@ -18,7 +18,7 @@ def aggregate_per_alpha(
     
     Args:
         out_dir: Root output directory (where to write aggregations)
-        baseline: Baseline name (A or B)
+        baseline: Baseline name (LwCP or LoUPCP)
         alpha: Alpha value (can be string or numeric)
         num_runs: Number of runs to aggregate
         levels: List of hierarchy levels (family, major, leaf)
@@ -35,12 +35,12 @@ def aggregate_per_alpha(
     alpha_dir_variants = []
     if alpha_float == 0.0:
         alpha_dir_variants = [
-            os.path.join(read_dir, f"baseline_{baseline}", "alpha_0"),
-            os.path.join(read_dir, f"baseline_{baseline}", "alpha_0.0")
+            os.path.join(read_dir, f"method_{baseline}", "alpha_0"),
+            os.path.join(read_dir, f"method_{baseline}", "alpha_0.0")
         ]
     else:
         alpha_dir_variants = [
-            os.path.join(read_dir, f"baseline_{baseline}", f"alpha_{alpha_float}")
+            os.path.join(read_dir, f"method_{baseline}", f"alpha_{alpha_float}")
         ]
     
     # Find the actual alpha directory that exists
@@ -57,11 +57,11 @@ def aggregate_per_alpha(
         )
         return
     
-    # Destination aggregation location for this baseline/alpha (always in output_dir)
-    baseline_dir = os.path.join(out_dir, f"baseline_{baseline}")
-    os.makedirs(baseline_dir, exist_ok=True)
+    # Destination aggregation location for this method/alpha (always in output_dir)
+    method_dir = os.path.join(out_dir, f"method_{baseline}")
+    os.makedirs(method_dir, exist_ok=True)
     # Use alpha_float for consistent directory naming (0 -> 0.0, not "0")
-    alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}")
+    alpha_dir = os.path.join(method_dir, f"alpha_{alpha_float}")
     os.makedirs(alpha_dir, exist_ok=True)
     alpha_agg_dir = os.path.join(alpha_dir, f"{baseline}_alpha_{alpha_float}_aggregated")
     os.makedirs(alpha_agg_dir, exist_ok=True)
@@ -92,8 +92,8 @@ def aggregate_per_alpha(
                 json_candidates.append(os.path.join(run_dir, f"{baseline}_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json"))
             
             # Backward-compatible legacy names
-            csv_legacy = os.path.join(run_dir, f"cp_{level}_summary.csv") if baseline == "A" else os.path.join(run_dir, f"b_cp_{level}_summary.csv")
-            json_legacy = os.path.join(run_dir, f"cp_{level}_summary.json") if baseline == "A" else os.path.join(run_dir, f"b_cp_{level}_summary.json")
+            csv_legacy = os.path.join(run_dir, f"cp_{level}_summary.csv") if baseline == "LwCP" else os.path.join(run_dir, f"b_cp_{level}_summary.csv")
+            json_legacy = os.path.join(run_dir, f"cp_{level}_summary.json") if baseline == "LwCP" else os.path.join(run_dir, f"b_cp_{level}_summary.json")
             csv_candidates.append(csv_legacy)
             json_candidates.append(json_legacy)
 
@@ -188,18 +188,18 @@ def aggregate_cross_alpha(
     
     Args:
         out_dir: Root output directory
-        baseline: Baseline name (A or B)
+        baseline: Baseline name (LwCP or LoUPCP)
         alphas: List of alpha values
         levels: List of hierarchy levels (family, major, leaf)
         metric_keys: List of metric keys to aggregate
         logger: Logger instance
     """
-    baseline_dir = os.path.join(out_dir, f"baseline_{baseline}")
+    method_dir = os.path.join(out_dir, f"method_{baseline}")
     cross_rows = []
     for alpha in alphas:
         # Convert to float for consistent directory naming
         alpha_float = float(alpha)
-        alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}", f"{baseline}_alpha_{alpha_float}_aggregated")
+        alpha_dir = os.path.join(method_dir, f"alpha_{alpha_float}", f"{baseline}_alpha_{alpha_float}_aggregated")
         for level in levels:
             agg_path = os.path.join(alpha_dir, f"aggregated_results_{level}.csv")
             if os.path.exists(agg_path):
@@ -233,7 +233,7 @@ def aggregate_cross_alpha(
     if cross_rows:
         try:
             cross_df = pd.DataFrame(cross_rows)
-            bl_agg_dir = os.path.join(baseline_dir, f"{baseline}_aggregated")
+            bl_agg_dir = os.path.join(method_dir, f"{baseline}_aggregated")
             os.makedirs(bl_agg_dir, exist_ok=True)
             cross_csv = os.path.join(bl_agg_dir, "metrics_across_alphas.csv")
             cross_df.to_csv(cross_csv, index=False)
@@ -249,37 +249,37 @@ def aggregate_cross_baseline(
     baselines: List[str],
     logger: logging.Logger
 ) -> None:
-    """Combines metrics from multiple baselines into AB_aggregated directory.
+    """Combines metrics from multiple methods into methods_aggregated directory.
     
     Args:
         out_dir: Root output directory
-        baselines: List of baseline names to aggregate (e.g., ["A", "B"])
+        baselines: List of method names to aggregate (e.g., ["LwCP", "LoUPCP"])
         logger: Logger instance
     """
-    # Build combined cross-baseline CSV at root out dir
+    # Build combined cross-method CSV at root out dir
     combined_rows = []
     for bl in baselines:
-        baseline_dir = os.path.join(out_dir, f"baseline_{bl}")
-        cross_csv = os.path.join(baseline_dir, f"{bl}_aggregated", "metrics_across_alphas.csv")
+        method_dir = os.path.join(out_dir, f"method_{bl}")
+        cross_csv = os.path.join(method_dir, f"{bl}_aggregated", "metrics_across_alphas.csv")
         if os.path.exists(cross_csv):
             try:
                 df_bl = pd.read_csv(cross_csv)
-                df_bl.insert(0, "baseline", bl)
+                df_bl.insert(0, "method", bl)
                 combined_rows.append(df_bl)
             except (pd.errors.EmptyDataError, pd.errors.ParserError, IOError) as e:
-                logger.warning(f"Failed to read cross CSV for baseline {bl}: {e}. File: {cross_csv}")
+                logger.warning(f"Failed to read cross CSV for method {bl}: {e}. File: {cross_csv}")
         else:
-            logger.debug(f"Cross-alpha CSV not found for baseline {bl}: {cross_csv}")
+            logger.debug(f"Cross-alpha CSV not found for method {bl}: {cross_csv}")
     if combined_rows:
         try:
             df_combined = pd.concat(combined_rows, ignore_index=True)
-            ab_dir = os.path.join(out_dir, "AB_aggregated")
-            os.makedirs(ab_dir, exist_ok=True)
-            combined_csv = os.path.join(ab_dir, "metrics_across_alphas_by_baseline.csv")
+            methods_dir = os.path.join(out_dir, "methods_aggregated")
+            os.makedirs(methods_dir, exist_ok=True)
+            combined_csv = os.path.join(methods_dir, "metrics_across_alphas_by_method.csv")
             df_combined.to_csv(combined_csv, index=False)
-            logger.info(f"Saved combined cross-baseline metrics -> {combined_csv}")
+            logger.info(f"Saved combined cross-method metrics -> {combined_csv}")
         except (IOError, OSError, ValueError) as e:
-            logger.error(f"Failed to save combined cross-baseline metrics: {e}")
+            logger.error(f"Failed to save combined cross-method metrics: {e}")
     else:
-        logger.warning("No cross-baseline data collected. Skipping combined aggregation.")
+        logger.warning("No cross-method data collected. Skipping combined aggregation.")
 

@@ -24,7 +24,7 @@ from exps.predictors.src.cphos.train import (
 )
 from exps.predictors.src.cphos.infer import load_model_bundle
 from exps.utils.results_export import export_experiment_results
-from exps.confpred.src.cp_experiment import run_baseline_a_one_shot
+from exps.confpred.src.cp_experiment import run_lwcp_one_shot
 from exps.confpred.src.utils import setup_single_file_logger, split_and_rename_artifacts
 from exps.confpred.src.plotting import (
     plot_alpha_boxplots,
@@ -150,38 +150,30 @@ def main():
         bundle_per_level[level] = load_model_bundle(level, artifacts_path, logger)
 
     # Determine alpha sweep and runs
-    baseline = input_params.get("baseline", None)
-    baselines = input_params.get("baselines", None)
-    # List of baselines to aggregate outputs for (default to both if not specified)
-    if baselines is None:
-        baselines_to_aggregate = [baseline] if baseline is not None else ["A", "B"]
+    method = input_params.get("method", None)
+    methods = input_params.get("methods", None)
+    # List of methods to aggregate outputs for (default to both if not specified)
+    if methods is None:
+        methods_to_aggregate = [method] if method is not None else ["LwCP", "LoUPCP"]
     else:
-        baselines_to_aggregate = list(baselines) if isinstance(baselines, (list, tuple)) else [str(baselines)]
-    # The one to execute (training/inference) remains single for now; default "A"
-    if baseline is None:
-        baseline = "A"
+        methods_to_aggregate = list(methods) if isinstance(methods, (list, tuple)) else [str(methods)]
+    # The one to execute (training/inference) remains single for now; default "LwCP"
+    if method is None:
+        method = "LwCP"
     
-    # Validate baseline configuration
-    valid_baselines = {"A", "B", "SCP", "S-CP"}
-    if baseline not in valid_baselines:
-        raise ValueError(f"Invalid baseline for execution: {baseline}. Must be one of {valid_baselines}")
-    # Normalize S-CP variants
-    baselines_to_aggregate_normalized = []
-    for bl in baselines_to_aggregate:
-        if bl in ["SCP", "S-CP"]:
-            baselines_to_aggregate_normalized.append("SCP")
-        else:
-            baselines_to_aggregate_normalized.append(bl)
-    baselines_to_aggregate = baselines_to_aggregate_normalized
-    invalid_aggregate = [bl for bl in baselines_to_aggregate if bl not in valid_baselines]
+    # Validate method configuration
+    valid_methods = {"LwCP", "LoUPCP"}
+    if method not in valid_methods:
+        raise ValueError(f"Invalid method for execution: {method}. Must be one of {valid_methods}")
+    invalid_aggregate = [m for m in methods_to_aggregate if m not in valid_methods]
     if invalid_aggregate:
-        raise ValueError(f"Invalid baselines in aggregation list: {invalid_aggregate}. Must be subset of {valid_baselines}")
-    if baseline not in baselines_to_aggregate:
+        raise ValueError(f"Invalid methods in aggregation list: {invalid_aggregate}. Must be subset of {valid_methods}")
+    if method not in methods_to_aggregate:
         logger.warning(
-            f"Baseline '{baseline}' is being executed but not in aggregation list {baselines_to_aggregate}. "
-            f"Results for this baseline may not be aggregated."
+            f"Method '{method}' is being executed but not in aggregation list {methods_to_aggregate}. "
+            f"Results for this method may not be aggregated."
         )
-    logger.info(f"Baseline configuration: execute={baseline}, aggregate={baselines_to_aggregate}")
+    logger.info(f"Method configuration: execute={method}, aggregate={methods_to_aggregate}")
     
     alphas = input_params.get("alphas", None)
     if alphas is None or (isinstance(alphas, (list, tuple)) and len(alphas) == 0):
@@ -191,13 +183,13 @@ def main():
         alphas = [float(alphas)]
     num_runs = int(input_params.get("num_runs", 1))
 
-    # Per-alpha/run execution (single baseline execution)
+    # Per-alpha/run execution (single method execution)
     for alpha in alphas:
-        baseline_exec_dir = os.path.join(out_dir, f"baseline_{baseline}")
-        os.makedirs(baseline_exec_dir, exist_ok=True)
+        method_exec_dir = os.path.join(out_dir, f"method_{method}")
+        os.makedirs(method_exec_dir, exist_ok=True)
         # Convert to float for consistent directory naming (0 -> 0.0, not "0")
         alpha_float = float(alpha)
-        alpha_dir_exec = os.path.join(baseline_exec_dir, f"alpha_{alpha_float}")
+        alpha_dir_exec = os.path.join(method_exec_dir, f"alpha_{alpha_float}")
         os.makedirs(alpha_dir_exec, exist_ok=True)
 
         # Run multiple times per alpha
@@ -211,72 +203,60 @@ def main():
             input_params_run["alpha"] = alpha_float
             input_params_run["seed"] = int(seed + run_idx)
 
-            if baseline == "A":
-                # Construct baseline B directory if B is in baselines_to_aggregate
-                out_dir_B = None
-                if "B" in baselines_to_aggregate:
-                    baseline_B_exec_dir = os.path.join(out_dir, f"baseline_B")
-                    os.makedirs(baseline_B_exec_dir, exist_ok=True)
-                    alpha_dir_B_exec = os.path.join(baseline_B_exec_dir, f"alpha_{alpha_float}")
-                    os.makedirs(alpha_dir_B_exec, exist_ok=True)
-                    out_dir_B = os.path.join(alpha_dir_B_exec, f"run_{run_idx}")
-                    os.makedirs(out_dir_B, exist_ok=True)
+            if method == "LwCP":
+                # Construct LoUP-CP directory if LoUPCP is in methods_to_aggregate
+                out_dir_LoUPCP = None
+                if "LoUPCP" in methods_to_aggregate:
+                    method_LoUPCP_exec_dir = os.path.join(out_dir, f"method_LoUPCP")
+                    os.makedirs(method_LoUPCP_exec_dir, exist_ok=True)
+                    alpha_dir_LoUPCP_exec = os.path.join(method_LoUPCP_exec_dir, f"alpha_{alpha_float}")
+                    os.makedirs(alpha_dir_LoUPCP_exec, exist_ok=True)
+                    out_dir_LoUPCP = os.path.join(alpha_dir_LoUPCP_exec, f"run_{run_idx}")
+                    os.makedirs(out_dir_LoUPCP, exist_ok=True)
                     
-                    # Validate that out_dir_B structure matches expected aggregation paths
-                    expected_base = os.path.join(out_dir, f"baseline_B", f"alpha_{alpha_float}")
-                    if not out_dir_B.startswith(expected_base):
+                    # Validate that out_dir_LoUPCP structure matches expected aggregation paths
+                    expected_base = os.path.join(out_dir, f"method_LoUPCP", f"alpha_{alpha_float}")
+                    if not out_dir_LoUPCP.startswith(expected_base):
                         logger.warning(
-                            f"out_dir_B structure may not match aggregation expectations: "
-                            f"expected to start with {expected_base}, got {out_dir_B}"
+                            f"out_dir_LoUPCP structure may not match aggregation expectations: "
+                            f"expected to start with {expected_base}, got {out_dir_LoUPCP}"
                         )
                     else:
-                        logger.debug(f"Validated out_dir_B structure: {out_dir_B}")
+                        logger.debug(f"Validated out_dir_LoUPCP structure: {out_dir_LoUPCP}")
                 
-                run_baseline_a_one_shot(
+                run_lwcp_one_shot(
                     logger=logger,
                     df=df,
                     maps=maps,
                     input_params=input_params_run,
                     out_dir=run_dir,
                     bundle_per_level=bundle_per_level,
-                    out_dir_B=out_dir_B,
-                )
-            elif baseline in ["SCP", "S-CP"]:
-                # For S-CP, we still need to run baseline A first to get the data
-                # Then S-CP will be computed within run_baseline_a_one_shot
-                run_baseline_a_one_shot(
-                    logger=logger,
-                    df=df,
-                    maps=maps,
-                    input_params=input_params_run,
-                    out_dir=run_dir,
-                    bundle_per_level=bundle_per_level,
-                    out_dir_B=None,
+                    out_dir_LoUPCP=out_dir_LoUPCP,
                 )
             else:
-                raise ValueError(f"Unsupported baseline for execution: {baseline}")
+                raise ValueError(f"Unsupported method for execution: {method}")
 
-            # Split and rename artifacts into baseline-specific trees with full-trace filenames
+            # Split and rename artifacts into method-specific trees with full-trace filenames
             split_and_rename_artifacts(
-                run_dir, out_dir, alpha_float, run_idx, baseline, baselines_to_aggregate, logger
+                run_dir, out_dir, alpha_float, run_idx, method, methods_to_aggregate, logger
             )
 
-    # Aggregations and plots per baseline
+    # Aggregations and plots per method
     levels = LEVELS
     metric_keys = METRIC_KEYS
 
-    for bl in baselines_to_aggregate:
-        baseline_dir = os.path.join(out_dir, f"baseline_{bl}")
-        os.makedirs(baseline_dir, exist_ok=True)
+    for m in methods_to_aggregate:
+        method_dir = os.path.join(out_dir, f"method_{m}")
+        os.makedirs(method_dir, exist_ok=True)
 
-        # Per-alpha aggregation for this baseline
+        # Per-alpha aggregation for this method
         for alpha in alphas:
             # Convert to float for consistent directory naming
             alpha_float = float(alpha)
             # Aggregate per alpha
             aggregate_per_alpha(
                 out_dir=out_dir,
-                baseline=bl,
+                baseline=m,
                 alpha=alpha_float,
                 num_runs=num_runs,
                 levels=levels,
@@ -284,19 +264,19 @@ def main():
                 logger=logger
             )
             
-            # Per-alpha plotting (boxplots) for this baseline
-            alpha_dir = os.path.join(baseline_dir, f"alpha_{alpha_float}")
-            alpha_agg_dir = os.path.join(alpha_dir, f"{bl}_alpha_{alpha_float}_aggregated")
+            # Per-alpha plotting (boxplots) for this method
+            alpha_dir = os.path.join(method_dir, f"alpha_{alpha_float}")
+            alpha_agg_dir = os.path.join(alpha_dir, f"{m}_alpha_{alpha_float}_aggregated")
             if os.path.exists(alpha_agg_dir):
                 try:
                     plot_alpha_boxplots(alpha_dir=alpha_agg_dir)
                 except (IOError, OSError, ValueError) as e:
-                    logger.warning(f"[{bl}] Per-alpha plotting failed for alpha={alpha}: {e}")
+                    logger.warning(f"[{m}] Per-alpha plotting failed for alpha={alpha}: {e}")
 
-        # Cross-alpha aggregation for this baseline
+        # Cross-alpha aggregation for this method
         aggregate_cross_alpha(
             out_dir=out_dir,
-            baseline=bl,
+            baseline=m,
             alphas=alphas,
             levels=levels,
             metric_keys=metric_keys,
@@ -304,29 +284,29 @@ def main():
         )
         
         # Cross-alpha plotting
-        bl_agg_dir = os.path.join(baseline_dir, f"{bl}_aggregated")
+        bl_agg_dir = os.path.join(method_dir, f"{m}_aggregated")
         cross_csv = os.path.join(bl_agg_dir, "metrics_across_alphas.csv")
         if os.path.exists(cross_csv):
             try:
                 plot_aggregate_lines(out_dir=bl_agg_dir, cross_alpha_csv=cross_csv)
             except (IOError, OSError, ValueError) as e:
-                logger.warning(f"[{bl}] Aggregate plotting failed: {e}")
+                logger.warning(f"[{m}] Aggregate plotting failed: {e}")
 
-    # Cross-baseline aggregation
+    # Cross-method aggregation
     aggregate_cross_baseline(
         out_dir=out_dir,
-        baselines=baselines_to_aggregate,
+        baselines=methods_to_aggregate,
         logger=logger
     )
     
-    # Cross-baseline plotting
-    ab_dir = os.path.join(out_dir, "AB_aggregated")
-    combined_csv = os.path.join(ab_dir, "metrics_across_alphas_by_baseline.csv")
+    # Cross-method plotting
+    methods_dir = os.path.join(out_dir, "methods_aggregated")
+    combined_csv = os.path.join(methods_dir, "metrics_across_alphas_by_method.csv")
     if os.path.exists(combined_csv):
         try:
-            plot_ab_comparison(ab_dir=ab_dir, combined_csv=combined_csv)
+            plot_ab_comparison(ab_dir=methods_dir, combined_csv=combined_csv)
         except (IOError, OSError, ValueError) as e:
-            logger.warning(f"AB aggregated plotting failed: {e}")
+            logger.warning(f"Methods aggregated plotting failed: {e}")
 
 if __name__ == "__main__":
     try:
