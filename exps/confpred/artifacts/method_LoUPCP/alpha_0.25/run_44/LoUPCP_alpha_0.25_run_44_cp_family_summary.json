@@ -1,0 +1,25 @@
+{
+  "level": "family",
+  "alpha_LoUPCP": 0.25,
+  "m_cal": 6329,
+  "q_hat_leaf_LoUPCP": 0.693006694316864,
+  "metrics": {
+    "coverage": 0.8690363349131122,
+    "set_size_mean": 0.9333333333333333,
+    "set_size_median": 1.0,
+    "empty_rate": 0.09447077409162717,
+    "singleton_rate": 0.8777251184834123,
+    "base_top1_acc": 0.9448657187993681,
+    "top1_acc_non_empty": 0.9504535938590369,
+    "hir": 0.0
+  },
+  "num_test_defined": 6330,
+  "num_test_used": 6330,
+  "class_labels": [
+    "fam:Android",
+    "fam:Linux",
+    "fam:Windows",
+    "fam:iOS",
+    "fam:macOS"
+  ]
+}
