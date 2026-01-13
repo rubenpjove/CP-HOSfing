@@ -1,0 +1,20 @@
+title: "CP-HOSfing - Conformal Prediction"
+description: "Code for conformal prediction approaches: Lw-CP (per-level), LoUP-CP (leaf-level only)"
+
+# Debugging
+slurm:
+  # time: "1-00:00:00"
+  time: "2:00:00"
+  cpus: 16
+  mem_per_cpu: "1GB"
+  gpus: 0
+
+# Final experiment
+# slurm:
+#   time: "1-00:00:00"
+#   cpus: 32
+#   mem_per_cpu: "2GB"
+#   gpus: 0
+
+notify:
+  email: ruben.perez.jove@udc.es

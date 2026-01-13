@@ -1,0 +1,94 @@
+# CP-HOSfing Conformal Prediction Configuration
+# Experiment: confpred
+#
+# This experiment runs conformal prediction methods and generates results.
+#
+# Usage:
+#   docker compose run --rm cphosfing confpred      # CPU mode
+#   docker compose run --rm cphosfing-gpu confpred  # GPU mode
+#
+# GPU settings (use_amp, num_workers, use_multi_gpu) are automatically
+# disabled when running in CPU mode.
+
+# =============================================================================
+# Dataset Paths (container paths - mount your data to /workspace/data)
+# =============================================================================
+
+# Input: Calibration/Test dataset (created by data_split experiment)
+dataset_caltest_path: /workspace/data/caltest.csv
+
+# Input: Preprocessing maps (created by data_split experiment)
+maps_path: /workspace/data/maps.plk
+
+# Input: Trained model artifacts (created by predictors experiment)
+artifacts_path: /workspace/artifacts/predictors
+
+# =============================================================================
+# Random Seed
+# =============================================================================
+seed: 42
+
+# =============================================================================
+# Conformal Prediction Methods
+# =============================================================================
+
+# Methods to evaluate
+methods:
+  - LwCP      # Level-wise Conformal Prediction
+  - LoUPCP    # Leaf-only with Upward Projection Conformal Prediction
+
+# =============================================================================
+# Experiment Configuration
+# =============================================================================
+
+# Alpha values (significance levels = 1 - coverage)
+alphas:
+  - 0.0
+  - 0.01
+  - 0.02
+  - 0.03
+  - 0.04
+  - 0.05
+  - 0.075
+  - 0.10
+  - 0.15
+  - 0.20
+  - 0.25
+  - 0.30
+  - 0.35
+  - 0.40
+  - 0.45
+  - 0.5
+
+# Number of runs per alpha (for statistical analysis)
+num_runs: 50
+
+# Cal/Test split proportions (from the caltest set)
+# split_proportions:
+#   cal: 0.5
+#   test: 0.5
+
+# =============================================================================
+# GPU Configuration
+# =============================================================================
+# These settings are automatically disabled when running in CPU mode
+
+use_amp: true              # Enable automatic mixed precision
+num_workers: 4             # Number of data loading workers
+use_multi_gpu: true        # Enable multi-GPU with DataParallel
+
+# =============================================================================
+# Debug Mode
+# =============================================================================
+# Set debug: true for faster testing with reduced dataset
+
+debug: false
+dataset_frac: 1.0          # Use full dataset (set < 1.0 for subset)
+debug_min_class_count: 0   # Minimum samples per class (0 = no filtering)
+
+# Quick debug configuration (uncomment to enable):
+# debug: true
+# dataset_frac: 0.1
+# num_runs: 2
+# alphas: [0.05, 0.20]
+# debug_min_class_count: 2

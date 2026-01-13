@@ -1,0 +1,10 @@
+title: "CP-HOSfing - Predictors"
+description: "Base level-wise predictors (models) for HOS fingerprinting: family, major and leaf"
+slurm:
+  # time: "3-00:00:00"
+  time: "1-00:00:00"
+  cpus: 32
+  mem_per_cpu: "2GB"
+  gpus: 0
+notify:
+  email: ruben.perez.jove@udc.es

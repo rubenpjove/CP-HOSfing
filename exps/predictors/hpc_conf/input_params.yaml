@@ -1,0 +1,72 @@
+# Comprehensive example input parameters for CP-HOSfing predictors
+dataset_train_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_TRAIN.csv
+maps_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/maps.plk
+seed: 42
+
+# Training configuration
+cv_splits: 5          # Number of cross-validation folds
+max_configs: 32       # Maximum number of hyperparameter configurations to try
+
+# Models to train - specify which hierarchical levels to train
+# models_to_train: ["family", "major", "leaf"]
+# models_to_train: ["major", "leaf"]
+models_to_train: ["family"]
+# models_to_train: ["major"]
+# models_to_train: ["leaf"]
+
+# Hyperparameters for each model level
+# You can override the default hyperparameter grids for each level
+# If not specified, the system will use built-in granularity-specific grids
+hyperparameters:
+  family:
+    # Family level: fewer classes, simpler models
+    hidden_dims: [[64, 32], [128, 64], [256, 128]]
+    dropout: [0.1, 0.2, 0.3]
+    lr: [1e-4, 3e-4, 1e-3]
+    weight_decay: [0.0, 1e-5, 1e-4]
+    batch_size: [64, 128, 256]
+    max_epochs: [100, 150, 200]
+    patience: [20, 25, 30]
+    use_bn: [True]
+    use_onecycle: [True]
+    grad_clip: [0.5, 1.0, 2.0]
+    use_smote: [False]
+    use_undersample: [True, False]
+    n_features: [None]
+  
+  major:
+    # Major level: medium complexity
+    hidden_dims: [[64, 32], [128, 64], [256, 128], [512, 256]]
+    dropout: [0.0, 0.1, 0.2, 0.3, 0.4]
+    lr: [1e-4, 3e-4, 1e-3, 3e-3]
+    weight_decay: [0.0, 1e-5, 1e-4, 1e-3]
+    batch_size: [32, 64, 128, 256]
+    max_epochs: [100, 150, 200, 250]
+    patience: [20, 25, 30]
+    use_bn: [True]
+    use_onecycle: [True]
+    grad_clip: [0.5, 1.0, 2.0]
+    use_smote: [False]
+    use_undersample: [False]
+    n_features: [None]
+  
+  leaf:
+    # Leaf level: most classes, most complex models
+    hidden_dims: [[64, 32], [128, 64], [256, 128], [512, 256], [1024, 512]]
+    dropout: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5]
+    lr: [1e-4, 3e-4, 1e-3, 3e-3]
+    weight_decay: [0.0, 1e-5, 1e-4, 1e-3, 1e-2]
+    batch_size: [32, 64, 128, 256]
+    max_epochs: [100, 150, 200, 250, 300]
+    patience: [20, 25, 30]
+    use_bn: [True]
+    use_onecycle: [True]
+    grad_clip: [0.5, 1.0, 2.0]
+    use_smote: [False]
+    use_undersample: [False]
+    n_features: [None]
+
+# GPU Configuration
+use_amp: true              # Enable automatic mixed precision training
+num_workers: 4             # Number of data loading workers (0 for CPU, 4+ for GPU)
+use_multi_gpu: true        # Enable multi-GPU training with DataParallel

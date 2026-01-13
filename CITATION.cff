@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "CP-HOSfing: Conformal Prediction in Hierarchical Operating System Fingerprinting"
+authors:
+  - family-names: Pérez Jove
+    given-names: Rubén
+    orcid: https://orcid.org/0000-0000-0000-0000
+version: 0.1.0
+date-released: 2026-01-13
+url: "https://github.com/your-username/CP-HOSfing"
+license: GPL-3.0
+repository-code: "https://github.com/your-username/CP-HOSfing"
+keywords:
+  - conformal prediction
+  - operating system fingerprinting
+  - hierarchical classification
+  - machine learning
+  - network security
+  - pytorch
+abstract: >-
+  A reproducible experimental framework for applying Conformal Prediction
+  techniques to Hierarchical Operating System Fingerprinting. The methodology
+  leverages the hierarchical structure of OS taxonomies to provide statistically
+  valid prediction sets with guaranteed coverage properties.

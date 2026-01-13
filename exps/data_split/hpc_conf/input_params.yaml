@@ -1,0 +1,15 @@
+# Comprehensive example input parameters for CP-HOSfing predictors
+dataset_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_PREPARED.csv
+dataset_train_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_TRAIN.csv
+dataset_caltest_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_CALTEST.csv
+dataset_indices_map_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/indices.json
+maps_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/maps.plk
+
+# Seed
+seed: 42
+
+# Split proportions for Train/Cal/Test (must sum to 1.0)
+split_proportions:
+  train: 0.70
+# caltest: 0.3
+caltest_min_per_class: 2

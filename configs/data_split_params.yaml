@@ -1,0 +1,42 @@
+# CP-HOSfing Data Split Configuration
+# Experiment: data_split
+#
+# This experiment preprocesses and splits the dataset into train/caltest sets.
+#
+# Usage:
+#   docker compose run --rm cphosfing data_split
+#   docker compose run --rm cphosfing-gpu data_split
+
+# =============================================================================
+# Dataset Paths (container paths - mount your data to /workspace/data)
+# =============================================================================
+
+# Input: Full dataset to split
+dataset_path: /workspace/data/dataset.csv
+
+# Output: Train/CalTest splits
+dataset_train_path: /workspace/data/train.csv
+dataset_caltest_path: /workspace/data/caltest.csv
+
+# Output: Preprocessing maps (encoders, scalers)
+maps_path: /workspace/data/maps.plk
+
+# Output: Index mapping for reproducibility
+dataset_indices_map_path: /workspace/data/indices.json
+
+# =============================================================================
+# Random Seed
+# =============================================================================
+seed: 42
+
+# =============================================================================
+# Split Configuration
+# =============================================================================
+
+# Proportion allocated to training (caltest = 1 - train)
+split_proportions:
+  train: 0.70
+
+# Minimum samples per class in calibration/test set
+# Ensures valid conformal prediction calibration
+caltest_min_per_class: 2

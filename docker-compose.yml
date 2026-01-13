@@ -1,0 +1,106 @@
+# CP-HOSfing Docker Compose Configuration
+# Provides experiment execution with optional GPU acceleration
+
+services:
+  # ==========================================================================
+  # CPU-only service (default)
+  # Usage: docker compose run --rm cphosfing <experiment>
+  # ==========================================================================
+  cphosfing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cphosfing:latest
+    container_name: cphosfing-runner
+
+    # Volume mounts for data persistence
+    volumes:
+      # Dataset files (read-only recommended for reproducibility)
+      - ./data:/workspace/data:ro
+      # Output artifacts (models, logs, plots)
+      - ./artifacts:/workspace/artifacts
+      # Configuration overrides
+      - ./configs:/workspace/configs:ro
+
+    # Environment variables
+    environment:
+      - USE_GPU=false
+      - OUT_DIR=/workspace/artifacts
+      - DATA_DIR=/workspace/data
+      - CONFIG_DIR=/workspace/configs
+      # Uncomment to use a specific config file:
+      # - CONFIG_FILE=/workspace/configs/custom_params.yaml
+
+    # Working directory inside container
+    working_dir: /app
+
+    # Default command: run all experiments
+    # Override with: docker compose run --rm cphosfing <experiment>
+    command: ["all"]
+
+    # Shared memory size for PyTorch DataLoader workers
+    shm_size: '2gb'
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  # ==========================================================================
+  # GPU-enabled service
+  # Usage: docker compose run --rm cphosfing-gpu <experiment>
+  # ==========================================================================
+  cphosfing-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cphosfing:latest
+    container_name: cphosfing-gpu-runner
+
+    # GPU access via NVIDIA Container Toolkit
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # Volume mounts for data persistence
+    volumes:
+      # Dataset files (read-only recommended for reproducibility)
+      - ./data:/workspace/data:ro
+      # Output artifacts (models, logs, plots)
+      - ./artifacts:/workspace/artifacts
+      # Configuration overrides
+      - ./configs:/workspace/configs:ro
+
+    # Environment variables
+    environment:
+      - USE_GPU=true
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=all
+      - OUT_DIR=/workspace/artifacts
+      - DATA_DIR=/workspace/data
+      - CONFIG_DIR=/workspace/configs
+      # Uncomment to use a specific config file:
+      # - CONFIG_FILE=/workspace/configs/custom_params.yaml
+
+    # Working directory inside container
+    working_dir: /app
+
+    # Default command: run all experiments
+    # Override with: docker compose run --rm cphosfing-gpu <experiment>
+    command: ["all"]
+
+    # Shared memory size for PyTorch DataLoader workers (larger for GPU)
+    shm_size: '8gb'
+
+    # Logging configuration
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"

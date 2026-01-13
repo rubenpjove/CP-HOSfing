@@ -1,0 +1,9 @@
+title: "CP-HOSfing - Dataset split"
+description: "Preprocessing and split of dataset for generating a training and calibration/test different sets"
+slurm:
+  time: "1:00:00"
+  cpus: 32
+  mem_per_cpu: "1GB"
+  gpus: 0
+notify:
+  email: ruben.perez.jove@udc.es
