@@ -65,7 +65,6 @@ Prepares the dataset for machine learning experiments through stratified partiti
 - Loads and preprocesses passive OS fingerprinting datasets
 - Performs stratified train/calibration-test splitting respecting the hierarchical label distribution
 - Ensures minimum sample requirements per class for valid conformal prediction calibration
-- Exports preprocessing maps (encoders, scalers) for reproducible inference
 
 **Key Parameters:**
 - `dataset_train_frac`: Proportion allocated to training (default: 0.70)
@@ -79,15 +78,7 @@ Trains hierarchical Multi-Layer Perceptron (MLP) classifiers using PyTorch with 
 **Functionality:**
 - Trains separate classifiers for each granularity level (family, major, leaf)
 - Implements randomized hyperparameter search with cross-validation
-- Supports mixed-precision training (AMP) and multi-GPU parallelization
-- Applies class balancing techniques (undersampling) for imbalanced distributions
 - Exports trained models and preprocessing pipelines
-
-**Architecture:**
-- Configurable hidden layer dimensions with batch normalization
-- Dropout regularization with tunable rates
-- OneCycleLR scheduling with gradient clipping
-- Feature selection via variance thresholding
 
 ### 3. Conformal Prediction (`exps/confpred`)
 
@@ -100,9 +91,11 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 - Generates publication-ready visualizations (boxplots, line plots, comparisons)
 
 **Evaluation Metrics:**
-- Empirical coverage rate
-- Prediction set size (efficiency)
-- Conditional coverage across label hierarchies
+- Coverage
+- Set Size
+- Empty Set Rate
+- Singleton Rate
+- Hierarchical Inconsistency Rate (HIR)
 
 ## Dataset
 
