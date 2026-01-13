@@ -10,6 +10,7 @@
 This repository provides a reproducible experimental framework for applying **Conformal Prediction (CP)** techniques to **Hierarchical Operating System Fingerprinting**. The methodology leverages the inherent hierarchical structure of operating system taxonomies—organized into *family*, *major version*, and *leaf* (specific version) levels—to provide statistically valid prediction sets with guaranteed coverage properties.
 
 The framework implements and evaluates two conformal prediction approaches:
+
 - **LwCP** (Level-wise Conformal Prediction)
 - **LoUPCP** (Leaf-only with Upward Projection Conformal Prediction)
 
@@ -62,11 +63,13 @@ The experimental pipeline consists of three sequential stages:
 Prepares the dataset for machine learning experiments through stratified partitioning.
 
 **Functionality:**
+
 - Loads and preprocesses passive OS fingerprinting datasets
 - Performs stratified train/calibration-test splitting respecting the hierarchical label distribution
 - Ensures minimum sample requirements per class for valid conformal prediction calibration
 
 **Key Parameters:**
+
 - `dataset_train_frac`: Proportion allocated to training (default: 0.70)
 - `caltest_min_per_class`: Minimum samples per class in calibration/test set
 - `seed`: Random seed for reproducibility
@@ -76,6 +79,7 @@ Prepares the dataset for machine learning experiments through stratified partiti
 Trains hierarchical Multi-Layer Perceptron (MLP) classifiers using PyTorch with optional GPU acceleration.
 
 **Functionality:**
+
 - Trains separate classifiers for each granularity level (family, major, leaf)
 - Implements randomized hyperparameter search with cross-validation
 - Exports trained models and preprocessing pipelines
@@ -85,12 +89,14 @@ Trains hierarchical Multi-Layer Perceptron (MLP) classifiers using PyTorch with 
 Executes conformal prediction experiments with comprehensive statistical evaluation.
 
 **Functionality:**
+
 - Implements LwCP and LoUPCP conformal prediction methods
 - Performs multi-run experiments across α-levels for coverage analysis
 - Aggregates results per-alpha, cross-alpha, and cross-method
 - Generates publication-ready visualizations (boxplots, line plots, comparisons)
 
 **Evaluation Metrics:**
+
 - Coverage
 - Set Size
 - Empty Set Rate
@@ -99,16 +105,11 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 
 ## Dataset
 
-This project uses the **Passive Operating System Fingerprinting Revisited** dataset by Laštovička et al. (2023), available on Zenodo: 
+This project uses the **Passive Operating System Fingerprinting Revisited** dataset by Laštovička et al. (2023), available on Zenodo:
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
 
-The dataset is not included in this repository due to file size restrictions. Download it and place it in the `./data/` directory:
-
-```bash
-wget https://zenodo.org/records/7635138/files/anonymized_flows.zip
-unzip anonymized_flows.zip -d ./data/
-```
+The dataset is not included in this repository due to file size restrictions.
 
 ## Installation
 
@@ -127,9 +128,10 @@ cd CP-HOSfing
 # Build the Docker image
 docker compose build
 
-# Prepare your dataset
-# Place your dataset CSV in ./data/dataset.csv
-cp /path/to/your/dataset.csv ./data/dataset.csv
+# Download and prepare the dataset
+wget https://zenodo.org/records/7635138/files/anonymized_flows.zip
+unzip anonymized_flows.zip -d ./data/
+mv flows_ground_truth_merged_anonymized.csv dataset.csv
 ```
 
 ## Usage
@@ -168,11 +170,11 @@ docker compose run --rm cphosfing-gpu confpred
 
 Each experiment has its own configuration file in the `configs/` directory:
 
-| Config File | Experiment | Description |
-|-------------|------------|-------------|
-| `data_split_params.yaml` | data_split | Dataset paths, split proportions |
+| Config File                | Experiment | Description                            |
+| -------------------------- | ---------- | -------------------------------------- |
+| `data_split_params.yaml` | data_split | Dataset paths, split proportions       |
 | `predictors_params.yaml` | predictors | Training hyperparameters, GPU settings |
-| `confpred_params.yaml` | confpred | CP methods, alpha values, num_runs |
+| `confpred_params.yaml`   | confpred   | CP methods, alpha values, num_runs     |
 
 ```bash
 # Edit experiment-specific configurations
@@ -186,16 +188,16 @@ docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfi
 
 **Key Configuration Options:**
 
-| Parameter | Config File | Description | Default |
-|-----------|-------------|-------------|---------|
-| `seed` | all | Random seed for reproducibility | 42 |
-| `split_proportions.train` | data_split | Training set proportion | 0.70 |
-| `caltest_min_per_class` | data_split | Min samples per class in cal/test | 2 |
-| `cv_splits` | predictors | Cross-validation folds | 5 |
-| `max_configs` | predictors | Hyperparameter configurations to try | 32 |
-| `models_to_train` | predictors | Hierarchy levels to train | [family, major, leaf] |
-| `methods` | confpred | CP methods to evaluate | [LwCP, LoUPCP] |
-| `alphas` | confpred | Significance levels (1-coverage) | [0.0, 0.01, ..., 0.5] |
+| Parameter                   | Config File | Description                          | Default               |
+| --------------------------- | ----------- | ------------------------------------ | --------------------- |
+| `seed`                    | all         | Random seed for reproducibility      | 42                    |
+| `split_proportions.train` | data_split  | Training set proportion              | 0.70                  |
+| `caltest_min_per_class`   | data_split  | Min samples per class in cal/test    | 2                     |
+| `cv_splits`               | predictors  | Cross-validation folds               | 5                     |
+| `max_configs`             | predictors  | Hyperparameter configurations to try | 32                    |
+| `models_to_train`         | predictors  | Hierarchy levels to train            | [family, major, leaf] |
+| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]        |
+| `alphas`                  | confpred    | Significance levels (1-coverage)     | [0.0, 0.01, ..., 0.5] |
 
 ### Directory Structure
 
@@ -257,14 +259,13 @@ docker compose run --rm -e USE_GPU=false cphosfing-gpu all
 
 **GPU-related configuration options** (in `predictors_params.yaml` and `confpred_params.yaml`):
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `use_amp` | Enable automatic mixed precision | `true` |
-| `num_workers` | DataLoader worker processes | `4` |
+| Parameter         | Description                       | Default  |
+| ----------------- | --------------------------------- | -------- |
+| `use_amp`       | Enable automatic mixed precision  | `true` |
+| `num_workers`   | DataLoader worker processes       | `4`    |
 | `use_multi_gpu` | Enable DataParallel for multi-GPU | `true` |
 
 > When running in CPU mode, these are automatically set to `false`, `0`, and `false` respectively.
-
 
 ## Citation
 

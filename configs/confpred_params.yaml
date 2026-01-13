@@ -26,7 +26,7 @@ artifacts_path: /workspace/artifacts/predictors
 # =============================================================================
 # Random Seed
 # =============================================================================
-seed: 42
+seed: 2026
 
 # =============================================================================
 # Conformal Prediction Methods
@@ -61,12 +61,12 @@ alphas:
   - 0.5
 
 # Number of runs per alpha (for statistical analysis)
-num_runs: 50
+num_runs: 1
 
 # Cal/Test split proportions (from the caltest set)
-# split_proportions:
-#   cal: 0.5
-#   test: 0.5
+split_proportions:
+  cal: 0.5
+  test: 0.5
 
 # =============================================================================
 # GPU Configuration

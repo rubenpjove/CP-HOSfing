@@ -75,19 +75,20 @@ configure_gpu() {
 # with embedded input_params
 generate_resolved_config() {
     local exp_name="$1"
-    local resolved_path="${OUT_DIR}/${exp_name}_resolved.yaml"
+    local resolved_path="/tmp/${exp_name}_resolved.yaml"
     
     # Check for custom config file or use experiment-specific default
+    # Note: redirect log output to stderr so only the path is captured by caller
     local params_file=""
     if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
         params_file="$CONFIG_FILE"
-        log_info "Using custom config: $CONFIG_FILE"
+        log_info "Using custom config: $CONFIG_FILE" >&2
     elif [ -f "${CONFIG_DIR}/${exp_name}_params.yaml" ]; then
         params_file="${CONFIG_DIR}/${exp_name}_params.yaml"
-        log_info "Using config: $params_file"
+        log_info "Using config: $params_file" >&2
     else
-        log_error "No config file found for ${exp_name}"
-        log_error "Expected: ${CONFIG_DIR}/${exp_name}_params.yaml"
+        log_error "No config file found for ${exp_name}" >&2
+        log_error "Expected: ${CONFIG_DIR}/${exp_name}_params.yaml" >&2
         exit 1
     fi
     
@@ -98,9 +99,11 @@ generate_resolved_config() {
     # Generate resolved config with embedded input_params
     # This matches the format expected by load_config_and_params()
     # Also inject GPU settings based on environment
-    python3 << PYEOF
+    # Note: redirect to stderr so only the final echo is captured
+    python3 >&2 << PYEOF
 import yaml
 import os
+import sys
 
 params_file = "${params_file}"
 resolved_path = "${resolved_path}"
@@ -117,7 +120,7 @@ if not use_gpu:
     input_params['use_amp'] = False
     input_params['num_workers'] = 0
     input_params['use_multi_gpu'] = False
-    print(f"[CONFIG] GPU disabled: use_amp=False, num_workers=0, use_multi_gpu=False")
+    print(f"[CONFIG] GPU disabled: use_amp=False, num_workers=0, use_multi_gpu=False", file=sys.stderr)
 else:
     # Ensure GPU settings are enabled (use config defaults or set them)
     if 'use_amp' not in input_params:
@@ -126,7 +129,7 @@ else:
         input_params['num_workers'] = 4
     if 'use_multi_gpu' not in input_params:
         input_params['use_multi_gpu'] = True
-    print(f"[CONFIG] GPU enabled: use_amp={input_params.get('use_amp')}, num_workers={input_params.get('num_workers')}, use_multi_gpu={input_params.get('use_multi_gpu')}")
+    print(f"[CONFIG] GPU enabled: use_amp={input_params.get('use_amp')}, num_workers={input_params.get('num_workers')}, use_multi_gpu={input_params.get('use_multi_gpu')}", file=sys.stderr)
 
 # Build resolved config structure
 resolved_config = {
@@ -141,7 +144,7 @@ resolved_config = {
 with open(resolved_path, 'w') as f:
     yaml.dump(resolved_config, f, default_flow_style=False)
 
-print(f"Generated resolved config: {resolved_path}")
+print(f"Generated resolved config: {resolved_path}", file=sys.stderr)
 PYEOF
     
     echo "$resolved_path"
@@ -174,11 +177,52 @@ run_experiment() {
     local resolved_config
     resolved_config=$(generate_resolved_config "$exp_name")
     
+    # Determine log file path (matches Python's setup_logging behavior)
+    local exp_out_dir="${OUT_DIR}/${exp_name}"
+    local log_file="${exp_out_dir}/info.log"
+    local tail_pid=""
+    
     # Run the experiment
     # main.py expects: python main.py -- <resolved_config_path>
     log_info "Executing: python -m exps.${exp_name}.src.main -- ${resolved_config}"
     
-    python -m "exps.${exp_name}.src.main" -- "$resolved_config"
+    # Start experiment in background
+    python -m "exps.${exp_name}.src.main" -- "$resolved_config" &
+    local exp_pid=$!
+    
+    # Wait for log file to appear, then stream it to console
+    local wait_count=0
+    while [ ! -f "$log_file" ] && [ $wait_count -lt 30 ]; do
+        sleep 0.5
+        wait_count=$((wait_count + 1))
+    done
+    
+    if [ -f "$log_file" ]; then
+        # Stream log file to console in background
+        tail -f "$log_file" &
+        tail_pid=$!
+    fi
+    
+    # Wait for experiment to complete
+    wait $exp_pid
+    local exit_code=$?
+    
+    # Stop tail process if running
+    if [ -n "$tail_pid" ]; then
+        kill $tail_pid 2>/dev/null || true
+        wait $tail_pid 2>/dev/null || true
+    fi
+    
+    # Clean up log file (user doesn't need to see it)
+    if [ -f "$log_file" ]; then
+        rm -f "$log_file"
+    fi
+    
+    # Check experiment exit code
+    if [ $exit_code -ne 0 ]; then
+        log_error "Experiment ${exp_name} failed with exit code ${exit_code}"
+        exit $exit_code
+    fi
     
     log_success "Experiment ${exp_name} completed successfully"
 }

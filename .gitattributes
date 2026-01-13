@@ -1,0 +1,31 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Shell scripts must always have LF line endings (for Docker/Linux compatibility)
+*.sh text eol=lf
+entrypoint.sh text eol=lf
+
+# Batch files should have CRLF (Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Keep these as LF for consistency across platforms
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+
+# Python files - LF
+*.py text eol=lf
+
+# Data files - binary (don't modify)
+*.csv binary
+*.plk binary
+*.pt binary
+*.joblib binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary

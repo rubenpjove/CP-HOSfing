@@ -23,7 +23,7 @@ maps_path: /workspace/data/maps.plk
 # =============================================================================
 # Random Seed
 # =============================================================================
-seed: 42
+seed: 2026
 
 # =============================================================================
 # Training Configuration
@@ -31,7 +31,7 @@ seed: 42
 
 # Cross-validation settings
 cv_splits: 5
-max_configs: 32
+max_configs: 1
 
 # Which hierarchical levels to train models for
 models_to_train:

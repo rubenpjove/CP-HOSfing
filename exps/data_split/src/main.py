@@ -186,8 +186,8 @@ def main():
 	logger = setup_logging(level=logging.INFO, to_file=True, log_dir=out_dir, to_console=False)
 	logger.info(f"Loading configuration from: {resolved_path}")
 
-	# Seed from params (fallback to 42)
-	seed = int(input_params.get("seed", 42))
+	# Seed from params (fallback to 2026)
+	seed = int(input_params.get("seed", 2026))
 	seed_everything(seed)
 	logger.info(f"Random seed set to: {seed}")
 
