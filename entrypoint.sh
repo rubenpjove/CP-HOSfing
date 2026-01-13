@@ -92,9 +92,13 @@ generate_resolved_config() {
         exit 1
     fi
     
-    # Create output directory for this experiment
+    # Create output directory for this experiment (artifacts)
     local exp_out_dir="${OUT_DIR}/${exp_name}"
     mkdir -p "$exp_out_dir"
+    
+    # Create internal log directory (not persisted outside container)
+    local exp_log_dir="/tmp/logs/${exp_name}"
+    mkdir -p "$exp_log_dir"
     
     # Generate resolved config with embedded input_params
     # This matches the format expected by load_config_and_params()
@@ -107,7 +111,7 @@ import sys
 
 params_file = "${params_file}"
 resolved_path = "${resolved_path}"
-exp_out_dir = "${exp_out_dir}"
+exp_log_dir = "${exp_log_dir}"
 use_gpu = os.environ.get("USE_GPU", "false").lower() in ("true", "1", "yes")
 
 # Load input parameters
@@ -134,7 +138,7 @@ else:
 # Build resolved config structure
 resolved_config = {
     'paths': {
-        'out': exp_out_dir,
+        'out': exp_log_dir,  # Logs go to internal container path, not artifacts
     },
     'input_params': input_params,
     'input_params_path': params_file,
@@ -178,8 +182,9 @@ run_experiment() {
     resolved_config=$(generate_resolved_config "$exp_name")
     
     # Determine log file path (matches Python's setup_logging behavior)
-    local exp_out_dir="${OUT_DIR}/${exp_name}"
-    local log_file="${exp_out_dir}/info.log"
+    # Logs go to internal container path, not artifacts
+    local exp_log_dir="/tmp/logs/${exp_name}"
+    local log_file="${exp_log_dir}/info.log"
     local tail_pid=""
     
     # Run the experiment

@@ -74,15 +74,20 @@ def main():
     resolved_path = sys.argv[2]
     config, input_params = load_config_and_params(resolved_path)
 
-    out_dir = config.get("paths", {}).get("out", ".")
-    logger = setup_logging(level=logging.INFO, to_file=True, log_dir=out_dir, to_console=False)
+    log_dir = config.get("paths", {}).get("out", ".")
+    logger = setup_logging(level=logging.INFO, to_file=True, log_dir=log_dir, to_console=False)
     # Reconfigure to write all logs into a single file named after the logging level
-    setup_single_file_logger(logger, out_dir)
+    setup_single_file_logger(logger, log_dir)
     # Flush all handlers to ensure file is created and first message is written immediately
     for handler in logger.handlers:
         if hasattr(handler, 'flush'):
             handler.flush()
     logger.info(f"Loading configuration from: {resolved_path}")
+    
+    # Get artifacts output path (where results are saved)
+    artifacts_output_path = input_params.get("artifacts_output_path", ".")
+    os.makedirs(artifacts_output_path, exist_ok=True)
+    logger.info(f"Artifacts output path: {artifacts_output_path}")
 
     # Seed from params (fallback to 2026)
     seed = int(input_params.get("seed", 2026))
@@ -144,10 +149,10 @@ def main():
             logger.warning(f"[debug] Rare-class filtering skipped due to error: {e}")
 
     # Prepare per-level bundles (hyperparameters and feature lists)
-    artifacts_path = input_params.get("artifacts_path", out_dir)
+    predictors_path = input_params.get("predictors_path")
     bundle_per_level = {}
     for level in ["family", "major", "leaf"]:
-        bundle_per_level[level] = load_model_bundle(level, artifacts_path, logger)
+        bundle_per_level[level] = load_model_bundle(level, predictors_path, logger)
 
     # Determine alpha sweep and runs
     method = input_params.get("method", None)
@@ -185,7 +190,7 @@ def main():
 
     # Per-alpha/run execution (single method execution)
     for alpha in alphas:
-        method_exec_dir = os.path.join(out_dir, f"method_{method}")
+        method_exec_dir = os.path.join(artifacts_output_path, f"method_{method}")
         os.makedirs(method_exec_dir, exist_ok=True)
         # Convert to float for consistent directory naming (0 -> 0.0, not "0")
         alpha_float = float(alpha)
@@ -207,7 +212,7 @@ def main():
                 # Construct LoUP-CP directory if LoUPCP is in methods_to_aggregate
                 out_dir_LoUPCP = None
                 if "LoUPCP" in methods_to_aggregate:
-                    method_LoUPCP_exec_dir = os.path.join(out_dir, f"method_LoUPCP")
+                    method_LoUPCP_exec_dir = os.path.join(artifacts_output_path, f"method_LoUPCP")
                     os.makedirs(method_LoUPCP_exec_dir, exist_ok=True)
                     alpha_dir_LoUPCP_exec = os.path.join(method_LoUPCP_exec_dir, f"alpha_{alpha_float}")
                     os.makedirs(alpha_dir_LoUPCP_exec, exist_ok=True)
@@ -215,7 +220,7 @@ def main():
                     os.makedirs(out_dir_LoUPCP, exist_ok=True)
                     
                     # Validate that out_dir_LoUPCP structure matches expected aggregation paths
-                    expected_base = os.path.join(out_dir, f"method_LoUPCP", f"alpha_{alpha_float}")
+                    expected_base = os.path.join(artifacts_output_path, f"method_LoUPCP", f"alpha_{alpha_float}")
                     if not out_dir_LoUPCP.startswith(expected_base):
                         logger.warning(
                             f"out_dir_LoUPCP structure may not match aggregation expectations: "
@@ -238,7 +243,7 @@ def main():
 
             # Split and rename artifacts into method-specific trees with full-trace filenames
             split_and_rename_artifacts(
-                run_dir, out_dir, alpha_float, run_idx, method, methods_to_aggregate, logger
+                run_dir, artifacts_output_path, alpha_float, run_idx, method, methods_to_aggregate, logger
             )
 
     # Aggregations and plots per method
@@ -246,7 +251,7 @@ def main():
     metric_keys = METRIC_KEYS
 
     for m in methods_to_aggregate:
-        method_dir = os.path.join(out_dir, f"method_{m}")
+        method_dir = os.path.join(artifacts_output_path, f"method_{m}")
         os.makedirs(method_dir, exist_ok=True)
 
         # Per-alpha aggregation for this method
@@ -255,7 +260,7 @@ def main():
             alpha_float = float(alpha)
             # Aggregate per alpha
             aggregate_per_alpha(
-                out_dir=out_dir,
+                out_dir=artifacts_output_path,
                 baseline=m,
                 alpha=alpha_float,
                 num_runs=num_runs,
@@ -275,7 +280,7 @@ def main():
 
         # Cross-alpha aggregation for this method
         aggregate_cross_alpha(
-            out_dir=out_dir,
+            out_dir=artifacts_output_path,
             baseline=m,
             alphas=alphas,
             levels=levels,
@@ -294,13 +299,13 @@ def main():
 
     # Cross-method aggregation
     aggregate_cross_baseline(
-        out_dir=out_dir,
+        out_dir=artifacts_output_path,
         baselines=methods_to_aggregate,
         logger=logger
     )
     
     # Cross-method plotting
-    methods_dir = os.path.join(out_dir, "methods_aggregated")
+    methods_dir = os.path.join(artifacts_output_path, "methods_aggregated")
     combined_csv = os.path.join(methods_dir, "metrics_across_alphas_by_method.csv")
     if os.path.exists(combined_csv):
         try:

@@ -9,7 +9,7 @@ import absl
 import absl.logging
 
 from exps.utils.io_utils import setup_logging, load_config_and_params
-from exps.predictors.src.cphos.data import load_dataset, preprocess_dataset
+from exps.predictors.src.cphos.data import load_dataset, prepare_raw_dataset, preprocess_dataset
 from exps.predictors.src.cphos.models import seed_everything
 
 
@@ -191,8 +191,17 @@ def main():
 	seed_everything(seed)
 	logger.info(f"Random seed set to: {seed}")
 
-	# Load and preprocess
+	# Load dataset
 	df = load_dataset(logger, input_params["dataset_path"])
+
+	# Prepare raw dataset (normalize labels, column names, etc.)
+	skip_raw_preparation = input_params.get("skip_raw_preparation", False)
+	if not skip_raw_preparation:
+		df = prepare_raw_dataset(logger, df)
+	else:
+		logger.info("Skipping raw dataset preparation (skip_raw_preparation=True)")
+
+	# Preprocess dataset (feature encoding, label hierarchy)
 	df, maps = preprocess_dataset(logger, df)
 
 	# Split dataset into training and calibration/test sets

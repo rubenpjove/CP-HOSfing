@@ -15,14 +15,23 @@
 dataset_path: /workspace/data/dataset.csv
 
 # Output: Train/CalTest splits
-dataset_train_path: /workspace/data/train.csv
-dataset_caltest_path: /workspace/data/caltest.csv
+dataset_train_path: /workspace/artifacts/data_split/train.csv
+dataset_caltest_path: /workspace/artifacts/data_split/caltest.csv
 
 # Output: Preprocessing maps (encoders, scalers)
-maps_path: /workspace/data/maps.plk
+maps_path: /workspace/artifacts/data_split/maps.plk
 
 # Output: Index mapping for reproducibility
-dataset_indices_map_path: /workspace/data/indices.json
+dataset_indices_map_path: /workspace/artifacts/data_split/indices.json
+
+# =============================================================================
+# Raw Data Preparation
+# =============================================================================
+
+# Skip raw dataset preparation (label normalization, column renaming, etc.)
+# Set to true if your dataset is already in the prepared format (OS family, OS major, OS minor)
+# Set to false (default) to run full preparation from raw format (UA OS family, UA OS major, etc.)
+skip_raw_preparation: false
 
 # =============================================================================
 # Random Seed

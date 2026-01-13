@@ -30,6 +30,236 @@ def load_dataset(logger: logging.Logger, dataset_path: str) -> pd.DataFrame:
     return df
 
 
+def prepare_raw_dataset(logger: logging.Logger, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare raw dataset by normalizing OS labels and column names.
+    
+    This function transforms raw data (e.g., from *ORIGINAL.csv files) into
+    the standardized format expected by the preprocessing pipeline.
+    
+    Transformations:
+        - Column renaming: UA OS family → OS family, UA OS major → OS major, etc.
+        - Drop OS patch column
+        - Unknown markers: Standardize *, nan, None to <MUnk> / <mUnk>
+        - Linux normalization: Merge distros, normalize versions
+        - Windows mapping: Group legacy versions
+        - macOS adjustments: Rename and fix version 10.16
+        - ChromeOS normalization: Extract milestone from version
+        - OTHER handling: Standardize Other → OTHER
+    
+    Args:
+        logger: Logger instance for output
+        df: Raw DataFrame to prepare
+        
+    Returns:
+        DataFrame with normalized labels and structure
+    """
+    logger.info("=== Starting Raw Dataset Preparation ===")
+    initial_shape = df.shape
+    
+    # Define label columns (check for both old and new naming conventions)
+    old_labels = ['UA OS family', 'UA OS major', 'UA OS minor', 'UA OS patch']
+    new_labels = ['OS family', 'OS major', 'OS minor', 'OS patch']
+    
+    # Column renaming: UA OS * → OS *
+    rename_map = {
+        'UA OS family': 'OS family',
+        'UA OS major': 'OS major',
+        'UA OS minor': 'OS minor',
+        'UA OS patch': 'OS patch'
+    }
+    renamed_cols = [col for col in rename_map.keys() if col in df.columns]
+    if renamed_cols:
+        df = df.rename(columns=rename_map)
+        logger.info(f"Renamed columns: {renamed_cols}")
+    
+    # Define final label columns
+    l_family = 'OS family'
+    l_major = 'OS major'
+    l_minor = 'OS minor'
+    l_patch = 'OS patch'
+    
+    # Drop OS patch column if present
+    if l_patch in df.columns:
+        df = df.drop(columns=[l_patch])
+        logger.info(f"Dropped column: {l_patch}")
+    
+    # Ensure label columns exist
+    required_labels = [l_family, l_major, l_minor]
+    missing_labels = [col for col in required_labels if col not in df.columns]
+    if missing_labels:
+        raise ValueError(f"Missing required label columns: {missing_labels}")
+    
+    # Convert label columns to string type
+    for col in required_labels:
+        df[col] = df[col].astype(str)
+    
+    # Unknown markers handling
+    logger.info("Standardizing unknown markers")
+    df[l_major] = df[l_major].replace({'*': '<MUnk>', 'nan': '<MUnk>', 'None': '<MUnk>'})
+    df[l_minor] = df[l_minor].replace({'*': '<mUnk>', 'nan': '<mUnk>', 'None': '<mUnk>'})
+    
+    # Also handle np.nan that was converted to 'nan' string
+    df.loc[df[l_major].isin(['nan', 'None', '*', '']), l_major] = '<MUnk>'
+    df.loc[df[l_minor].isin(['nan', 'None', '*', '']), l_minor] = '<mUnk>'
+    
+    # ==========================================================================
+    # Linux Normalization
+    # ==========================================================================
+    logger.info("Normalizing Linux distributions")
+    
+    # Change OS classes to "Linux": Symbian OS, Slackware, Linux Mint
+    for old_name in ['Symbian OS', 'Slackware', 'Linux Mint']:
+        count = (df[l_family] == old_name).sum()
+        if count > 0:
+            df.loc[df[l_family] == old_name, l_family] = 'Linux'
+            logger.info(f"Changed {count} rows from '{old_name}' to 'Linux'")
+    
+    # Normalize Linux distros: Ubuntu, Fedora become major versions under Linux
+    linux_distros = {'Linux', 'Ubuntu', 'Fedora'}
+    mask = df[l_family].isin(linux_distros)
+    distro_count = mask.sum()
+    
+    if distro_count > 0:
+        old_family = df.loc[mask, l_family].copy()
+        old_major = df.loc[mask, l_major].copy()
+        
+        df.loc[mask, l_family] = 'Linux'
+        df.loc[mask, l_major] = old_family.values
+        df.loc[mask, l_minor] = old_major.values
+        logger.info(f"Normalized {distro_count} Linux distro rows (Ubuntu/Fedora → Linux major)")
+    
+    # Detect Debian from Linux versions 9, 10
+    mask_linux_debian = (
+        (df[l_family] == 'Linux') &
+        (df[l_major] == 'Linux') &
+        (df[l_minor].isin(['9', '10']))
+    )
+    debian_count = mask_linux_debian.sum()
+    if debian_count > 0:
+        df.loc[mask_linux_debian, l_major] = 'Debian'
+        logger.info(f"Detected {debian_count} Debian rows from Linux versions 9/10")
+    
+    # Handle remaining Linux-Linux entries (unknown major)
+    linux_MUnk_mask = (df[l_family] == 'Linux') & (df[l_major] == 'Linux')
+    munk_count = linux_MUnk_mask.sum()
+    if munk_count > 0:
+        df.loc[linux_MUnk_mask, l_major] = '<MUnk>'
+        logger.info(f"Set {munk_count} Linux-Linux rows to <MUnk> major")
+    
+    # For Linux, if <MUnk> is in minor, replace with <mUnk>
+    linux_minor_MUnk_mask = (df[l_family] == 'Linux') & (df[l_minor] == '<MUnk>')
+    if linux_minor_MUnk_mask.sum() > 0:
+        df.loc[linux_minor_MUnk_mask, l_minor] = '<mUnk>'
+    
+    # ==========================================================================
+    # Windows Normalization
+    # ==========================================================================
+    logger.info("Normalizing Windows versions")
+    
+    WIN_MAP = {
+        '3.1': 'Legacy', '95': 'Legacy', '98': 'Legacy', 'ME': 'Legacy',
+        '2000': 'Legacy', 'NT': 'Legacy', 'CE': 'Legacy',
+        'XP': 'XP', 'Vista': 'Vista', '7': '7', '8': '8', '10': '10'
+    }
+    
+    windows_mask = df[l_family] == 'Windows'
+    if windows_mask.sum() > 0:
+        df.loc[windows_mask, l_major] = df.loc[windows_mask, l_major].apply(
+            lambda x: WIN_MAP.get(x, x)
+        )
+        legacy_count = (df.loc[windows_mask, l_major] == 'Legacy').sum()
+        logger.info(f"Mapped Windows versions ({legacy_count} → Legacy)")
+    
+    # ==========================================================================
+    # macOS Normalization
+    # ==========================================================================
+    logger.info("Normalizing macOS versions")
+    
+    # Mac OS X → macOS
+    macos_rename_count = (df[l_family] == 'Mac OS X').sum()
+    if macos_rename_count > 0:
+        df.loc[df[l_family] == 'Mac OS X', l_family] = 'macOS'
+        logger.info(f"Renamed {macos_rename_count} 'Mac OS X' rows to 'macOS'")
+    
+    # Fix version 10.16.0 → 11 (Big Sur reporting issue)
+    mask_macos_10_16 = (
+        (df[l_family] == 'macOS') &
+        (df[l_major] == '10') &
+        (df[l_minor] == '16.0')
+    )
+    big_sur_count = mask_macos_10_16.sum()
+    if big_sur_count > 0:
+        df.loc[mask_macos_10_16, l_major] = '11'
+        df.loc[mask_macos_10_16, l_minor] = '<mUnk>'
+        logger.info(f"Fixed {big_sur_count} macOS 10.16 rows → 11 (Big Sur)")
+    
+    # ==========================================================================
+    # ChromeOS Normalization
+    # ==========================================================================
+    logger.info("Normalizing ChromeOS versions")
+    
+    # Chrome OS → ChromeOS
+    chromeos_rename_count = (df[l_family] == 'Chrome OS').sum()
+    if chromeos_rename_count > 0:
+        df.loc[df[l_family] == 'Chrome OS', l_family] = 'ChromeOS'
+        logger.info(f"Renamed {chromeos_rename_count} 'Chrome OS' rows to 'ChromeOS'")
+    
+    def norm_chromeos_major(maj):
+        """Extract 3-digit milestone from ChromeOS version (13020 → 130)."""
+        s = str(maj)
+        return s[:3] if s.isdigit() and len(s) >= 3 else '<MUnk>'
+    
+    mask_chrome = df[l_family] == 'ChromeOS'
+    chrome_count = mask_chrome.sum()
+    if chrome_count > 0:
+        df.loc[mask_chrome, l_major] = df.loc[mask_chrome, l_major].apply(norm_chromeos_major)
+        df.loc[mask_chrome, l_minor] = '<mUnk>'
+        logger.info(f"Normalized {chrome_count} ChromeOS versions to milestone format")
+    
+    # ==========================================================================
+    # OTHER Class Handling
+    # ==========================================================================
+    logger.info("Normalizing OTHER class")
+    
+    # Other → OTHER
+    other_rename_count = (df[l_family] == 'Other').sum()
+    if other_rename_count > 0:
+        df.loc[df[l_family] == 'Other', l_family] = 'OTHER'
+        logger.info(f"Renamed {other_rename_count} 'Other' rows to 'OTHER'")
+    
+    # Unknown major versions (except OTHER family) → OTHER major
+    mask_major_munk = (df[l_major] == '<MUnk>') & (df[l_family] != 'OTHER')
+    munk_to_other_count = mask_major_munk.sum()
+    if munk_to_other_count > 0:
+        df.loc[mask_major_munk, l_major] = 'OTHER'
+        logger.info(f"Changed {munk_to_other_count} <MUnk> major values to 'OTHER'")
+    
+    # Handle specific unknown minor cases
+    # Windows 8 with unknown minor
+    mask_win8_unk = (df[l_family] == 'Windows') & (df[l_major] == '8') & (df[l_minor] == '<mUnk>')
+    if mask_win8_unk.sum() > 0:
+        df.loc[mask_win8_unk, l_minor] = 'OTHER'
+        logger.info(f"Set {mask_win8_unk.sum()} Windows 8 unknown minor to 'OTHER'")
+    
+    # iOS 12 with unknown minor
+    mask_ios12_unk = (df[l_family] == 'iOS') & (df[l_major] == '12') & (df[l_minor] == '<mUnk>')
+    if mask_ios12_unk.sum() > 0:
+        df.loc[mask_ios12_unk, l_minor] = 'OTHER'
+        logger.info(f"Set {mask_ios12_unk.sum()} iOS 12 unknown minor to 'OTHER'")
+    
+    # Linux Ubuntu with unknown minor
+    mask_ubuntu_unk = (df[l_family] == 'Linux') & (df[l_major] == 'Ubuntu') & (df[l_minor] == '<mUnk>')
+    if mask_ubuntu_unk.sum() > 0:
+        df.loc[mask_ubuntu_unk, l_minor] = 'OTHER'
+        logger.info(f"Set {mask_ubuntu_unk.sum()} Linux Ubuntu unknown minor to 'OTHER'")
+    
+    logger.info(f"Raw dataset preparation complete: {initial_shape} → {df.shape}")
+    log_dataset_info(logger, df, "Prepared Dataset")
+    
+    return df
+
+
 def _norm(x: Any):
     if pd.isna(x):
         return pd.NA

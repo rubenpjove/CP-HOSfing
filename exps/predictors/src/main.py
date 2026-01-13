@@ -122,37 +122,48 @@ def main():
 	# Persist models
 	logger.info("=== Saving Models ===")
 	import torch
+	import os
+	
+	# Get artifacts output path from config (default to current directory)
+	artifacts_output_path = input_params.get("artifacts_output_path", ".")
+	os.makedirs(artifacts_output_path, exist_ok=True)
+	logger.info(f"Saving models to: {artifacts_output_path}")
+	
 	for level, bundle in models.items():
 		# Move model state to CPU before saving
 		model_state = bundle["model"].state_dict()
 		# Convert any GPU tensors to CPU tensors
 		cpu_state = {k: v.cpu() if hasattr(v, 'cpu') else v for k, v in model_state.items()}
 		
+		model_path = os.path.join(artifacts_output_path, f"{level}_mlp_state.pt")
+		preproc_path = os.path.join(artifacts_output_path, f"{level}_preproc.joblib")
+		
 		# Handle DataParallel models - save the unwrapped model state
 		if isinstance(bundle["model"], torch.nn.DataParallel):
 			# Remove 'module.' prefix from keys to save the unwrapped model state
 			unwrapped_state = {k.replace('module.', ''): v for k, v in cpu_state.items()}
-			torch.save(unwrapped_state, f"{level}_mlp_state.pt")
+			torch.save(unwrapped_state, model_path)
 			logger.info(f"Saved unwrapped model state for {level} (removed DataParallel prefix)")
 		else:
-			torch.save(cpu_state, f"{level}_mlp_state.pt")
-	keys_to_save = [
-		"encoder",
-		"imputer",
-		"scaler",
-		"var_selector",
-		"feature_selector",
-		"categorical_features",
-		"numerical_features",
-		"best_params",
-		"feature_selection_method",
-		"n_features_selected",
-		"in_dim",
-		"out_dim",
-		"classes_",
-	]
-	preproc = {k: bundle[k] for k in keys_to_save if k in bundle}
-	joblib.dump(preproc, f"{level}_preproc.joblib")
+			torch.save(cpu_state, model_path)
+		keys_to_save = [
+			"encoder",
+			"imputer",
+			"scaler",
+			"var_selector",
+			"feature_selector",
+			"categorical_features",
+			"numerical_features",
+			"best_params",
+			"feature_selection_method",
+			"n_features_selected",
+			"in_dim",
+			"out_dim",
+			"classes_",
+		]
+		preproc = {k: bundle[k] for k in keys_to_save if k in bundle}
+		joblib.dump(preproc, preproc_path)
+		logger.info(f"Saved {level} model: {model_path}, {preproc_path}")
 
 	logger.info("Models saved successfully")
 	logger.info("=== CP-HOSfing Predictor Training Completed Successfully ===")

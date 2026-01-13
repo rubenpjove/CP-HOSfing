@@ -15,10 +15,13 @@
 # =============================================================================
 
 # Input: Training dataset (created by data_split experiment)
-dataset_train_path: /workspace/data/train.csv
+dataset_train_path: /workspace/artifacts/data_split/train.csv
 
 # Input: Preprocessing maps (created by data_split experiment)
-maps_path: /workspace/data/maps.plk
+maps_path: /workspace/artifacts/data_split/maps.plk
+
+# Output: Trained model artifacts (used by confpred experiment)
+artifacts_output_path: /workspace/artifacts/predictors
 
 # =============================================================================
 # Random Seed
@@ -31,7 +34,7 @@ seed: 2026
 
 # Cross-validation settings
 cv_splits: 5
-max_configs: 1
+max_configs: 2
 
 # Which hierarchical levels to train models for
 models_to_train:

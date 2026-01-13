@@ -15,13 +15,16 @@
 # =============================================================================
 
 # Input: Calibration/Test dataset (created by data_split experiment)
-dataset_caltest_path: /workspace/data/caltest.csv
+dataset_caltest_path: /workspace/artifacts/data_split/caltest.csv
 
 # Input: Preprocessing maps (created by data_split experiment)
-maps_path: /workspace/data/maps.plk
+maps_path: /workspace/artifacts/data_split/maps.plk
 
 # Input: Trained model artifacts (created by predictors experiment)
-artifacts_path: /workspace/artifacts/predictors
+predictors_path: /workspace/artifacts/predictors
+
+# Output: Conformal prediction results and plots
+artifacts_output_path: /workspace/artifacts/confpred
 
 # =============================================================================
 # Random Seed
@@ -61,7 +64,7 @@ alphas:
   - 0.5
 
 # Number of runs per alpha (for statistical analysis)
-num_runs: 1
+num_runs: 5
 
 # Cal/Test split proportions (from the caltest set)
 split_proportions:
