@@ -106,9 +106,7 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 
 ## Dataset
 
-This project uses the **Passive Operating System Fingerprinting Revisited** dataset by Laštovička et al. (2023), available on Zenodo:
-
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
+This project uses the **Passive Operating System Fingerprinting Revisited** dataset by Laštovička et al. (2023), available on Zenodo: [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
 
 The dataset is not included in this repository due to file size restrictions. Download it and place it in the `./data/` directory:
 
@@ -129,7 +127,7 @@ unzip anonymized_flows.zip -d ./data/
 ```bash
 # Clone the repository
 git clone https://github.com/rubenpjove/CP-HOSfing.git
-cd CP-HOSfing/public
+cd CP-HOSfing
 
 # Build the Docker image
 docker compose build
@@ -203,9 +201,6 @@ docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfi
 | `models_to_train` | predictors | Hierarchy levels to train | [family, major, leaf] |
 | `methods` | confpred | CP methods to evaluate | [LwCP, LoUPCP] |
 | `alphas` | confpred | Significance levels (1-coverage) | [0.0, 0.01, ..., 0.5] |
-| `num_runs` | confpred | Repetitions per alpha | 50 |
-| `use_amp` | predictors, confpred | Enable mixed precision (GPU) | true |
-| `use_multi_gpu` | predictors, confpred | Enable DataParallel | true |
 
 ### Directory Structure
 
@@ -247,10 +242,6 @@ ls artifacts/predictors/*.pt
 ls artifacts/predictors/*.joblib
 
 # Conformal prediction results
-ls artifacts/confpred/method_LwCP/
-ls artifacts/confpred/method_LoUPCP/
-
-# Aggregated metrics and plots
 ls artifacts/confpred/methods_aggregated/
 ```
 
@@ -279,16 +270,6 @@ docker compose run --rm -e USE_GPU=false cphosfing-gpu all
 
 > When running in CPU mode, these are automatically set to `false`, `0`, and `false` respectively.
 
-### Debug Mode
-
-For rapid iteration during development, edit `configs/confpred_params.yaml`:
-
-```yaml
-debug: true
-dataset_frac: 0.1      # Use 10% of data
-num_runs: 2            # Fewer repetitions
-alphas: [0.05, 0.20]   # Fewer alpha values
-```
 
 ## Citation
 
