@@ -174,4 +174,5 @@ data/*
 
 # Artifacts directory: keep the folder and .gitkeep, ignore everything else
 artifacts/*
+artifacts/**
 !artifacts/.gitkeep
