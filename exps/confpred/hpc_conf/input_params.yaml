@@ -1,7 +1,7 @@
 # Comprehensive example input parameters for CP-HOSfing predictors
 dataset_caltest_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/lastovicka_2023_passiveOSRevisited_CALTEST.csv
 maps_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/maps.plk
-artifacts_path: /home/ulc/co/rpj/projects/CP-HOSfing/public/exps/predictors/artifacts
+artifacts_path: /home/ulc/co/rpj/projects/CP-HOSfing/public/artifacts/predictors
 seed: 2026
 
 # GPU Configuration
@@ -20,7 +20,7 @@ split_proportions:
 
 # DEBUGGING
 # FALSE
-num_runs: 50
+num_runs: 1
 alphas: [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.075, 0.10, 0.15, 0.20, 0.25, 0.30, 0.35, 0.40, 0.45, 0.5]
 # num_runs: 1
 # alphas: [0.05, 0.25]

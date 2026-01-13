@@ -7,7 +7,7 @@
 
 ## Abstract
 
-This repository provides a reproducible experimental framework for applying **Conformal Prediction (CP)** techniques to **Hierarchical Operating System Fingerprinting**. The methodology leverages the inherent hierarchical structure of operating system taxonomies—organized into *family*, *major version*, and *leaf* (specific version) levels—to provide statistically valid prediction sets with guaranteed coverage properties.
+This repository provides a reproducible experimental framework for applying **Conformal Prediction (CP)** techniques to **Hierarchical Operating System Fingerprinting**. The methodology leverages the inherent hierarchical structure of operating system taxonomies—organized into *family*, *major version*, and *leaf* (minor/specific version) levels—to provide statistically valid prediction sets with guaranteed coverage properties.
 
 The framework implements and evaluates two conformal prediction approaches:
 - **LwCP** (Level-wise Conformal Prediction)
@@ -74,7 +74,7 @@ Prepares the dataset for machine learning experiments through stratified partiti
 
 ### 2. Predictor Training (`exps/predictors`)
 
-Trains hierarchical Multi-Layer Perceptron (MLP) classifiers using PyTorch with optional GPU acceleration.
+Trains hierarchical Multi-Layer Perceptron (MLP) classifiers using PyTorch with GPU acceleration.
 
 **Functionality:**
 - Trains separate classifiers for each granularity level (family, major, leaf)
@@ -115,7 +115,7 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 
 ```bash
 # Clone the repository
-git clone https://github.com/rubenpjove/CP-HOSfing.git
+git clone https://github.com/your-username/CP-HOSfing.git
 cd CP-HOSfing/public
 
 # Build the Docker image
@@ -160,39 +160,27 @@ docker compose run --rm cphosfing-gpu confpred
 
 ### Configuration
 
-Each experiment has its own configuration file in the `configs/` directory:
-
-| Config File | Experiment | Description |
-|-------------|------------|-------------|
-| `data_split_params.yaml` | data_split | Dataset paths, split proportions |
-| `predictors_params.yaml` | predictors | Training hyperparameters, GPU settings |
-| `confpred_params.yaml` | confpred | CP methods, alpha values, num_runs |
+Experiments are configured via YAML files in the `configs/` directory:
 
 ```bash
-# Edit experiment-specific configurations
-vim configs/data_split_params.yaml
-vim configs/predictors_params.yaml
-vim configs/confpred_params.yaml
+# Edit the default configuration
+vim configs/docker_params.yaml
 
-# Use a custom configuration file (overrides default)
-docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfing predictors
+# Use a custom configuration file
+docker compose run --rm -e CONFIG_FILE=/workspace/configs/custom.yaml cphosfing all
 ```
 
 **Key Configuration Options:**
 
-| Parameter | Config File | Description | Default |
-|-----------|-------------|-------------|---------|
-| `seed` | all | Random seed for reproducibility | 42 |
-| `split_proportions.train` | data_split | Training set proportion | 0.70 |
-| `caltest_min_per_class` | data_split | Min samples per class in cal/test | 2 |
-| `cv_splits` | predictors | Cross-validation folds | 5 |
-| `max_configs` | predictors | Hyperparameter configurations to try | 32 |
-| `models_to_train` | predictors | Hierarchy levels to train | [family, major, leaf] |
-| `methods` | confpred | CP methods to evaluate | [LwCP, LoUPCP] |
-| `alphas` | confpred | Significance levels (1-coverage) | [0.0, 0.01, ..., 0.5] |
-| `num_runs` | confpred | Repetitions per alpha | 50 |
-| `use_amp` | predictors, confpred | Enable mixed precision (GPU) | true |
-| `use_multi_gpu` | predictors, confpred | Enable DataParallel | true |
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `seed` | Random seed for reproducibility | 42 |
+| `cv_splits` | Cross-validation folds | 5 |
+| `max_configs` | Hyperparameter configurations to try | 32 |
+| `models_to_train` | Hierarchy levels to train | [family, major, leaf] |
+| `methods` | CP methods to evaluate | [LwCP, LoUPCP] |
+| `alphas` | Significance levels (1-coverage) | [0.0, 0.01, ..., 0.5] |
+| `num_runs` | Repetitions per configuration | 50 |
 
 ### Directory Structure
 
@@ -202,12 +190,9 @@ public/
 ├── docker-compose.yml      # Orchestration configuration
 ├── entrypoint.sh           # Experiment runner CLI
 ├── requirements.txt        # Python dependencies
-├── CITATION.cff            # Citation metadata
 │
 ├── configs/                # Configuration files
-│   ├── data_split_params.yaml
-│   ├── predictors_params.yaml
-│   └── confpred_params.yaml
+│   └── docker_params.yaml  # Default parameters
 │
 ├── data/                   # Dataset mount point
 │   └── dataset.csv         # Your input data
@@ -256,7 +241,7 @@ docker compose run --rm -e CUDA_VISIBLE_DEVICES=0,1 cphosfing-gpu all
 docker compose run --rm -e USE_GPU=false cphosfing-gpu all
 ```
 
-**GPU-related configuration options** (in `predictors_params.yaml` and `confpred_params.yaml`):
+**GPU-related configuration options** (in `configs/docker_params.yaml`):
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
@@ -268,20 +253,48 @@ docker compose run --rm -e USE_GPU=false cphosfing-gpu all
 
 ### Debug Mode
 
-For rapid iteration during development, edit `configs/confpred_params.yaml`:
+For rapid iteration during development:
 
 ```yaml
+# In configs/docker_params.yaml
 debug: true
 dataset_frac: 0.1      # Use 10% of data
 num_runs: 2            # Fewer repetitions
 alphas: [0.05, 0.20]   # Fewer alpha values
 ```
 
+### Custom Experiment Configurations
+
+Create experiment-specific configuration files:
+
+```bash
+# Create separate configs for each experiment
+cp configs/docker_params.yaml configs/data_split_params.yaml
+cp configs/docker_params.yaml configs/predictors_params.yaml
+cp configs/docker_params.yaml configs/confpred_params.yaml
+
+# The entrypoint will automatically detect experiment-specific configs
+```
+
 ## Citation
 
-If you use this software in your research, please cite it using the [`CITATION.cff`](CITATION.cff) file.
+If you use this software in your research, please cite it using the metadata in [`CITATION.cff`](CITATION.cff):
 
-> **Tip:** Click **"Cite this repository"** in the GitHub sidebar for APA and BibTeX formats.
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.xxxxxxx-blue.svg)](https://doi.org/10.5281/zenodo.xxxxxxx)
+
+```bibtex
+@software{perezjove2026cphosfing,
+  author       = {Pérez Jove, Rubén},
+  title        = {{CP-HOSfing: Conformal Prediction in Hierarchical 
+                   Operating System Fingerprinting}},
+  year         = {2026},
+  version      = {0.1.0},
+  url          = {https://github.com/your-username/CP-HOSfing},
+  license      = {GPL-3.0}
+}
+```
+
+> **Note:** GitHub automatically renders citation information from `CITATION.cff`. Click "Cite this repository" in the repository sidebar for formatted citations.
 
 ## License
 

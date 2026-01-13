@@ -157,7 +157,7 @@ dmypy.json
 *.backup
 
 # HPC files
-exps/**/conf/
+exps/**/hpc_conf/
 exps/**/artifacts/
 
 # =============================================================================
@@ -169,8 +169,8 @@ data/*
 !data/.gitkeep
 
 # Artifacts directory (keep .gitkeep only)
-artifacts/*
-!artifacts/.gitkeep
+# artifacts/*
+# !artifacts/.gitkeep
 
 # Docker generated resolved configs
 *_resolved.yaml
