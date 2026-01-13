@@ -7,12 +7,12 @@
 
 ## Abstract
 
-This repository provides a reproducible experimental framework for applying **Conformal Prediction (CP)** techniques to **Hierarchical Operating System Fingerprinting**. The methodology leverages the inherent hierarchical structure of operating system taxonomies—organized into *family*, *major version*, and *leaf* (specific version) levels—to provide statistically valid prediction sets with guaranteed coverage properties.
+This repository provides a reproducible experimental framework for applying **Conformal Prediction (CP)** techniques to **Hierarchical Operating System Fingerprinting**. The methodology leverages the inherent hierarchical tree structure of operating system taxonomies—organized into *family*, *major version*, and *leaf* (specific version) levels—to provide statistically valid prediction sets with guaranteed coverage properties.
 
 The framework implements and evaluates two conformal prediction approaches:
 
-- **LwCP** (Level-wise Conformal Prediction)
-- **LoUPCP** (Leaf-only with Upward Projection Conformal Prediction)
+- **Lw-CP** (Level-wise Conformal Prediction)
+- **LoUP-CP** (Leaf-only with Upward Projection Conformal Prediction)
 
 ## Methodology Overview
 
@@ -42,7 +42,7 @@ The framework implements and evaluates two conformal prediction approaches:
        │                        ▼                          │
        │           ┌────────────────────────┐              │
        │           │  Conformal Prediction  │              │
-       │           │   (LwCP / LoUPCP)      │              │
+       │           │   (Lw-CP / LoUP-CP)    │              │
        │           └────────────────────────┘              │
        │                        │                          │
        │                        ▼                          │
@@ -90,7 +90,7 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 
 **Functionality:**
 
-- Implements LwCP and LoUPCP conformal prediction methods
+- Implements Lw-CP and LoUP-CP conformal prediction methods
 - Performs multi-run experiments across α-levels for coverage analysis
 - Aggregates results per-alpha, cross-alpha, and cross-method
 - Generates publication-ready visualizations (boxplots, line plots, comparisons)
@@ -196,7 +196,7 @@ docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfi
 | `cv_splits`               | predictors  | Cross-validation folds               | 5                     |
 | `max_configs`             | predictors  | Hyperparameter configurations to try | 32                    |
 | `models_to_train`         | predictors  | Hierarchy levels to train            | [family, major, leaf] |
-| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]        |
+| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]      |
 | `alphas`                  | confpred    | Significance levels (1-coverage)     | [0.0, 0.01, ..., 0.5] |
 
 ### Directory Structure
@@ -279,4 +279,4 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 
 ## Acknowledgments
 
-This work was supported by [funding agency/institution].
+This work was supported by the grant ED431C 2022/46 - Competitive Reference Groups GRC - funded by *Xunta de Galicia* (Spain). This work was also supported by CITIC, as a center accredited for excellence within the Galician University System and a member of the CIGUS Network, which receives subsidies from the Department of Education, Science, Universities, and Vocational Training of the *Xunta de Galicia*. Additionally, CITIC is co-financed by the EU through the FEDER Galicia 2021–27 operational program (Ref. ED431G 2023/01). This work was also supported by the *"Formación de Profesorado Universitario"* (FPU) grant from the Spanish Ministry of Universities to Rubén Pérez Jove (Grant FPU22/04418). This work was supported by the inMOTION programme, INDITEX-UDC Predoctoral Research Stay Grants (2025 call), under the collaboration agreement between Universidade da Coruña (UDC) and INDITEX, S.A. Funding for open access charge: Universidade da Coruña/CISUG.
