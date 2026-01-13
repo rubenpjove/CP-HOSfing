@@ -104,6 +104,19 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 - Prediction set size (efficiency)
 - Conditional coverage across label hierarchies
 
+## Dataset
+
+This project uses the **Passive Operating System Fingerprinting Revisited** dataset by Laštovička et al. (2023), available on Zenodo:
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
+
+The dataset is not included in this repository due to file size restrictions. Download it and place it in the `./data/` directory:
+
+```bash
+wget https://zenodo.org/records/7635138/files/anonymized_flows.zip
+unzip anonymized_flows.zip -d ./data/
+```
+
 ## Installation
 
 ### Prerequisites
