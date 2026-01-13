@@ -64,7 +64,7 @@ alphas:
   - 0.5
 
 # Number of runs per alpha (for statistical analysis)
-num_runs: 5
+num_runs: 50
 
 # Cal/Test split proportions (from the caltest set)
 split_proportions:

@@ -34,7 +34,7 @@ seed: 2026
 
 # Cross-validation settings
 cv_splits: 5
-max_configs: 2
+max_configs: 32
 
 # Which hierarchical levels to train models for
 models_to_train:
