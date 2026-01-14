@@ -21,7 +21,7 @@ The framework implements and evaluates two conformal prediction approaches:
   │                  Hierarchical OS Taxonomy                   │
   │                                                             │
   │       Family ───────────► Major ─────────────► Leaf         │
-  │   (e.g., Windows)  (e.g., Windows 10)  (e.g., 10.0.19041)   │
+  │   (e.g., Windows)  (e.g., Windows 10)      (e.g., 22H2)     │
   └─────────────────────────────────────────────────────────────┘
                                  │
        ┌─────────────────────────┼─────────────────────────┐
@@ -196,7 +196,7 @@ docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfi
 | `cv_splits`               | predictors  | Cross-validation folds               | 5                     |
 | `max_configs`             | predictors  | Hyperparameter configurations to try | 32                    |
 | `models_to_train`         | predictors  | Hierarchy levels to train            | [family, major, leaf] |
-| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]      |
+| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]        |
 | `alphas`                  | confpred    | Significance levels (1-coverage)     | [0.0, 0.01, ..., 0.5] |
 
 ### Directory Structure
