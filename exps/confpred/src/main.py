@@ -24,7 +24,7 @@ from exps.predictors.src.cphos.train import (
 )
 from exps.predictors.src.cphos.infer import load_model_bundle
 from exps.utils.results_export import export_experiment_results
-from exps.confpred.src.cp_experiment import run_lwcp_one_shot
+from exps.confpred.src.cp_experiment import run_lcp_one_shot
 from exps.confpred.src.utils import setup_single_file_logger, split_and_rename_artifacts
 from exps.confpred.src.plotting import (
     plot_alpha_boxplots,
@@ -159,15 +159,15 @@ def main():
     methods = input_params.get("methods", None)
     # List of methods to aggregate outputs for (default to both if not specified)
     if methods is None:
-        methods_to_aggregate = [method] if method is not None else ["LwCP", "LoUPCP"]
+        methods_to_aggregate = [method] if method is not None else ["LCP", "PCP"]
     else:
         methods_to_aggregate = list(methods) if isinstance(methods, (list, tuple)) else [str(methods)]
-    # The one to execute (training/inference) remains single for now; default "LwCP"
+    # The one to execute (training/inference) remains single for now; default "LCP"
     if method is None:
-        method = "LwCP"
+        method = "LCP"
     
     # Validate method configuration
-    valid_methods = {"LwCP", "LoUPCP"}
+    valid_methods = {"LCP", "PCP"}
     if method not in valid_methods:
         raise ValueError(f"Invalid method for execution: {method}. Must be one of {valid_methods}")
     invalid_aggregate = [m for m in methods_to_aggregate if m not in valid_methods]
@@ -207,36 +207,36 @@ def main():
             input_params_run = dict(input_params)
             input_params_run["alpha"] = alpha_float
             input_params_run["seed"] = int(seed + run_idx)
-
-            if method == "LwCP":
-                # Construct LoUP-CP directory if LoUPCP is in methods_to_aggregate
-                out_dir_LoUPCP = None
-                if "LoUPCP" in methods_to_aggregate:
-                    method_LoUPCP_exec_dir = os.path.join(artifacts_output_path, f"method_LoUPCP")
-                    os.makedirs(method_LoUPCP_exec_dir, exist_ok=True)
-                    alpha_dir_LoUPCP_exec = os.path.join(method_LoUPCP_exec_dir, f"alpha_{alpha_float}")
-                    os.makedirs(alpha_dir_LoUPCP_exec, exist_ok=True)
-                    out_dir_LoUPCP = os.path.join(alpha_dir_LoUPCP_exec, f"run_{run_idx}")
-                    os.makedirs(out_dir_LoUPCP, exist_ok=True)
+            
+            if method == "LCP":
+                # Construct projection-based CP directory if PCP is in methods_to_aggregate
+                out_dir_PCP = None
+                if "PCP" in methods_to_aggregate:
+                    method_PCP_exec_dir = os.path.join(artifacts_output_path, f"method_PCP")
+                    os.makedirs(method_PCP_exec_dir, exist_ok=True)
+                    alpha_dir_PCP_exec = os.path.join(method_PCP_exec_dir, f"alpha_{alpha_float}")
+                    os.makedirs(alpha_dir_PCP_exec, exist_ok=True)
+                    out_dir_PCP = os.path.join(alpha_dir_PCP_exec, f"run_{run_idx}")
+                    os.makedirs(out_dir_PCP, exist_ok=True)
                     
-                    # Validate that out_dir_LoUPCP structure matches expected aggregation paths
-                    expected_base = os.path.join(artifacts_output_path, f"method_LoUPCP", f"alpha_{alpha_float}")
-                    if not out_dir_LoUPCP.startswith(expected_base):
+                    # Validate that out_dir_PCP structure matches expected aggregation paths
+                    expected_base = os.path.join(artifacts_output_path, f"method_PCP", f"alpha_{alpha_float}")
+                    if not out_dir_PCP.startswith(expected_base):
                         logger.warning(
-                            f"out_dir_LoUPCP structure may not match aggregation expectations: "
-                            f"expected to start with {expected_base}, got {out_dir_LoUPCP}"
+                            f"out_dir_PCP structure may not match aggregation expectations: "
+                            f"expected to start with {expected_base}, got {out_dir_PCP}"
                         )
                     else:
-                        logger.debug(f"Validated out_dir_LoUPCP structure: {out_dir_LoUPCP}")
+                        logger.debug(f"Validated out_dir_PCP structure: {out_dir_PCP}")
                 
-                run_lwcp_one_shot(
+                run_lcp_one_shot(
                     logger=logger,
                     df=df,
                     maps=maps,
                     input_params=input_params_run,
                     out_dir=run_dir,
                     bundle_per_level=bundle_per_level,
-                    out_dir_LoUPCP=out_dir_LoUPCP,
+                    out_dir_PCP=out_dir_PCP,
                 )
             else:
                 raise ValueError(f"Unsupported method for execution: {method}")

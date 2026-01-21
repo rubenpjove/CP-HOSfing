@@ -14,8 +14,8 @@ authors:
   - family-names: Vázquez-Naya
     given-names: Jose
     orcid: https://orcid.org/0000-0002-6194-5329   
-version: 0.1.0
-date-released: 2026-01-13
+version: 1.0.0
+date-released: 2026-01-21
 url: "https://github.com/rubenpjove/CP-HOSfing"
 license: GPL-3.0
 repository-code: "https://github.com/rubenpjove/CP-HOSfing"

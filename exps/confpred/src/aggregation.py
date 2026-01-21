@@ -18,7 +18,7 @@ def aggregate_per_alpha(
     
     Args:
         out_dir: Root output directory (where to write aggregations)
-        baseline: Baseline name (LwCP or LoUPCP)
+        baseline: Baseline name (LCP or PCP)
         alpha: Alpha value (can be string or numeric)
         num_runs: Number of runs to aggregate
         levels: List of hierarchy levels (family, major, leaf)
@@ -92,8 +92,8 @@ def aggregate_per_alpha(
                 json_candidates.append(os.path.join(run_dir, f"{baseline}_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json"))
             
             # Backward-compatible legacy names
-            csv_legacy = os.path.join(run_dir, f"cp_{level}_summary.csv") if baseline == "LwCP" else os.path.join(run_dir, f"b_cp_{level}_summary.csv")
-            json_legacy = os.path.join(run_dir, f"cp_{level}_summary.json") if baseline == "LwCP" else os.path.join(run_dir, f"b_cp_{level}_summary.json")
+            csv_legacy = os.path.join(run_dir, f"cp_{level}_summary.csv") if baseline == "LCP" else os.path.join(run_dir, f"b_cp_{level}_summary.csv")
+            json_legacy = os.path.join(run_dir, f"cp_{level}_summary.json") if baseline == "LCP" else os.path.join(run_dir, f"b_cp_{level}_summary.json")
             csv_candidates.append(csv_legacy)
             json_candidates.append(json_legacy)
 
@@ -188,7 +188,7 @@ def aggregate_cross_alpha(
     
     Args:
         out_dir: Root output directory
-        baseline: Baseline name (LwCP or LoUPCP)
+        baseline: Baseline name (LCP or PCP)
         alphas: List of alpha values
         levels: List of hierarchy levels (family, major, leaf)
         metric_keys: List of metric keys to aggregate
@@ -253,7 +253,7 @@ def aggregate_cross_baseline(
     
     Args:
         out_dir: Root output directory
-        baselines: List of method names to aggregate (e.g., ["LwCP", "LoUPCP"])
+        baselines: List of method names to aggregate (e.g., ["LCP", "PCP"])
         logger: Logger instance
     """
     # Build combined cross-method CSV at root out dir

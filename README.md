@@ -11,8 +11,8 @@ This repository provides a reproducible experimental framework for applying **Co
 
 The framework implements and evaluates two conformal prediction approaches:
 
-- **Lw-CP** (Level-wise Conformal Prediction)
-- **LoUP-CP** (Leaf-only with Upward Projection Conformal Prediction)
+- **L-CP** (level-wise CP)
+- **P-CP** (projection-based CP)
 
 ## Methodology Overview
 
@@ -42,7 +42,7 @@ The framework implements and evaluates two conformal prediction approaches:
        │                        ▼                          │
        │           ┌────────────────────────┐              │
        │           │  Conformal Prediction  │              │
-       │           │   (Lw-CP / LoUP-CP)    │              │
+       │           │    (L-CP / P-CP)       │              │
        │           └────────────────────────┘              │
        │                        │                          │
        │                        ▼                          │
@@ -90,7 +90,7 @@ Executes conformal prediction experiments with comprehensive statistical evaluat
 
 **Functionality:**
 
-- Implements Lw-CP and LoUP-CP conformal prediction methods
+- Implements level-wise CP (L-CP) and projection-based CP (P-CP) conformal prediction methods
 - Performs multi-run experiments across α-levels for coverage analysis
 - Aggregates results per-alpha, cross-alpha, and cross-method
 - Generates publication-ready visualizations (boxplots, line plots, comparisons)
@@ -196,7 +196,7 @@ docker compose run --rm -e CONFIG_FILE=/workspace/configs/my_custom.yaml cphosfi
 | `cv_splits`               | predictors  | Cross-validation folds               | 5                     |
 | `max_configs`             | predictors  | Hyperparameter configurations to try | 32                    |
 | `models_to_train`         | predictors  | Hierarchy levels to train            | [family, major, leaf] |
-| `methods`                 | confpred    | CP methods to evaluate               | [LwCP, LoUPCP]        |
+| `methods`                 | confpred    | CP methods to evaluate               | [LCP, PCP]            |
 | `alphas`                  | confpred    | Significance levels (1-coverage)     | [0.0, 0.01, ..., 0.5] |
 
 ### Directory Structure

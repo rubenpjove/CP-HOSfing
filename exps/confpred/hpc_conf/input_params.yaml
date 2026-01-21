@@ -10,8 +10,8 @@ num_workers: 4             # Number of data loading workers (0 for CPU, 4+ for G
 use_multi_gpu: true        # Enable multi-GPU training with DataParallel
 
 # Experiment selection
-# methods: ["LwCP", "LoUPCP"]
-methods: ["LwCP", "LoUPCP"]
+# methods: ["LCP", "PCP"]
+methods: ["LCP", "PCP"]
 
 # Split proportions for Cal/Test (70% already used for Train)
 split_proportions:

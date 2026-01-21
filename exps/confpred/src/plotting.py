@@ -155,7 +155,7 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
     
     Expects: combined_csv with columns: method, alpha, level, metric, mean, std
     Saves to: ab_dir/plots/{methods}_{metric}_mean_std_across_levels.{png,svg}
-    where {methods} is the methods joined by "-" (e.g., "LwCP-LoUPCP")
+    where {methods} is the methods joined by "-" (e.g., "LCP-PCP")
     
     Args:
         ab_dir: Directory for methods aggregated results (plots subdirectory will be created)
@@ -174,18 +174,18 @@ def plot_ab_comparison(ab_dir: str, combined_csv: str):
     # Handle both "baseline" and "method" column names for backward compatibility
     method_col = "method" if "method" in df_combined.columns else "baseline"
     methods_present = sorted(df_combined[method_col].dropna().unique().tolist())
-    # Create method prefix for filenames (e.g., "LwCP-LoUPCP")
+    # Create method prefix for filenames (e.g., "LCP-PCP")
     methods_prefix = "-".join(methods_present)
     # Method colors; line styles encode levels
-    method_color_map = {"LwCP": "#1f77b4", "LoUPCP": "#2ca02c"}
+    method_color_map = {"LCP": "#1f77b4", "PCP": "#2ca02c"}
     level_linestyle_map = {"family": "-", "major": "--", "leaf": ":"}
     
     def format_method_label(method: str) -> str:
         """Format method name for display."""
-        if method == "LwCP":
-            return "Lw-CP"
-        elif method == "LoUPCP":
-            return "LoUP-CP"
+        if method == "LCP":
+            return "L-CP"
+        elif method == "PCP":
+            return "P-CP"
         return f"Method {method}"
     
     for metric in METRIC_KEYS:

@@ -482,8 +482,8 @@ def save_split_summary(out_dir: str, split_info: Dict):
         json.dump(split_info, f, indent=2)
 
 
-def save_loupcp_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: float, run_idx: int):
-    """Save LoUP-CP CP artifacts.
+def save_pcp_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alpha: float, run_idx: int):
+    """Save projection-based CP (P-CP) artifacts.
     
     Args:
         out_dir_target: Output directory
@@ -493,16 +493,16 @@ def save_loupcp_cp_artifacts(out_dir_target: str, level: str, summary: Dict, alp
         run_idx: Run index
     """
     os.makedirs(out_dir_target, exist_ok=True)
-    # Use same format as Lw-CP: LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}
-    json_path = os.path.join(out_dir_target, f"LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json")
-    csv_path = os.path.join(out_dir_target, f"LoUPCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.csv")
+    # Use same format as L-CP: PCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.{ext}
+    json_path = os.path.join(out_dir_target, f"PCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.json")
+    csv_path = os.path.join(out_dir_target, f"PCP_alpha_{alpha}_run_{run_idx}_cp_{level}_summary.csv")
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)
     flat = {k: v for k, v in summary.items() if not isinstance(v, (list, dict))}
     pd.DataFrame([flat]).to_csv(csv_path, index=False)
 
 
-def run_loupcp(
+def run_pcp(
     df: pd.DataFrame,
     maps: Dict,
     input_params: Dict,
@@ -517,17 +517,17 @@ def run_loupcp(
     idx_test_leaf_seen: np.ndarray,
     y_test_leaf_global_aligned: np.ndarray,
     alpha_single: float,
-    base_pred_labels_from_LwCP: Dict[str, Dict[int, str]],
+    base_pred_labels_from_LCP: Dict[str, Dict[int, str]],
     logger: logging.Logger,
-    out_dir_LoUPCP: Optional[str] = None,
-) -> None:
-    """Run LoUP-CP: Leaf-only CP with upward closure.
+    out_dir_PCP: Optional[str] = None,
+    ) -> None:
+    """Run projection-based CP (P-CP): leaf-only CP with upward projection.
     
     Args:
         df: DataFrame with data
         maps: Mapping dictionaries
         input_params: Input parameters
-        out_dir: Output directory for Lw-CP
+        out_dir: Output directory for L-CP
         leaf_vocab_global: Leaf vocabulary (global indices)
         major_vocab_global: Major vocabulary (global indices)
         family_vocab_global: Family vocabulary (global indices)
@@ -538,26 +538,26 @@ def run_loupcp(
         idx_test_leaf_seen: Test leaf seen indices
         y_test_leaf_global_aligned: Test leaf global labels (aligned)
         alpha_single: Alpha value
-        base_pred_labels_from_LwCP: Base predictions from Lw-CP
+        base_pred_labels_from_LCP: Base predictions from L-CP
         logger: Logger instance
-        out_dir_LoUPCP: Optional output directory for LoUP-CP (defaults to out_dir if None)
+        out_dir_PCP: Optional output directory for P-CP (defaults to out_dir if None)
     """
     logger.info("=" * 80)
-    logger.info("Processing LoUP-CP: Leaf-only CP with upward projection")
+    logger.info("Processing P-CP: projection-based CP (leaf-only CP with upward projection)")
     logger.info("=" * 80)
     
     # Check if we have all required data
     if leaf_vocab_global is None or probs_test_leaf is None or q_hat_leaf is None or idx_test_leaf_seen is None:
-        logger.warning("LoUP-CP requires leaf level data. Skipping LoUP-CP.")
+        logger.warning("P-CP requires leaf level data. Skipping P-CP.")
         return
     elif m_leaf == 0:
-        logger.warning("LoUP-CP requires non-empty leaf calibration set. Skipping LoUP-CP.")
+        logger.warning("P-CP requires non-empty leaf calibration set. Skipping P-CP.")
         return
     
-    # Save LoUP-CP files to the provided out_dir_LoUPCP (or fallback to out_dir if not provided)
-    if out_dir_LoUPCP is None:
-        out_dir_LoUPCP = out_dir
-    os.makedirs(out_dir_LoUPCP, exist_ok=True)
+    # Save P-CP files to the provided out_dir_PCP (or fallback to out_dir if not provided)
+    if out_dir_PCP is None:
+        out_dir_PCP = out_dir
+    os.makedirs(out_dir_PCP, exist_ok=True)
     
     # Extract run_idx from path (e.g., .../run_1 -> 1)
     norm_out = os.path.normpath(out_dir)
@@ -590,19 +590,19 @@ def run_loupcp(
         logger,
     )
     
-    # LoUP-CP quantile: reuse Lw-CP's leaf quantile
-    q_hat_LoUPCP = q_hat_leaf
-    logger.info(f"LoUP-CP using leaf quantile: q_hat_LoUPCP = {q_hat_LoUPCP:.6f} (reused from Lw-CP leaf alpha={alpha_single})")
+    # P-CP quantile: reuse L-CP's leaf quantile
+    q_hat_PCP = q_hat_leaf
+    logger.info(f"P-CP using leaf quantile: q_hat_PCP = {q_hat_PCP:.6f} (reused from L-CP leaf alpha={alpha_single})")
     
-    # Test-time hook for LoUP-CP: reuse Lw-CP's test tensors
+    # Test-time hook for P-CP: reuse L-CP's test tensors
     # Filter test samples to closed-set at leaf level (same as A)
     # Note: probs_test_leaf and y_test_leaf_global_aligned are already aligned from A's processing
     y_test_leaf_global = y_test_leaf_global_aligned
     
-    # Build leaf local mapping for LoUP-CP
+    # Build leaf local mapping for P-CP
     # Use integer keys to match the types in labels
-    leaf_g2l_LoUPCP = {int(g): i for i, g in enumerate(leaf_vocab_global)}
-    test_leaf_seen_mask = np.array([int(g) in leaf_g2l_LoUPCP for g in y_test_leaf_global])
+    leaf_g2l_PCP = {int(g): i for i, g in enumerate(leaf_vocab_global)}
+    test_leaf_seen_mask = np.array([int(g) in leaf_g2l_PCP for g in y_test_leaf_global])
     
     # Apply leaf closed-set filter
     probs_test_leaf_subset = probs_test_leaf[test_leaf_seen_mask]
@@ -614,22 +614,22 @@ def run_loupcp(
     y_test_family_global = df.iloc[idx_test_leaf_subset]["family_idx"].astype("Int64").values
     
     logger.info(
-        f"LoUP-CP test filtering: {len(y_test_leaf_global)} total, "
+        f"P-CP test filtering: {len(y_test_leaf_global)} total, "
         f"{test_leaf_seen_mask.sum()} with leaf in vocab"
     )
     
-    # Build leaf keep masks for LoUP-CP
+    # Build leaf keep masks for P-CP
     scores_leaf = 1.0 - probs_test_leaf_subset
-    keep_leaf_bool = (scores_leaf <= q_hat_LoUPCP)  # [N, m_leaf]
+    keep_leaf_bool = (scores_leaf <= q_hat_PCP)  # [N, m_leaf]
     
     # Project upward
     keep_major_bool, keep_family_bool = project_leaf_masks_upward(
         keep_leaf_bool, A_major, A_family
     )
     
-    # Map true labels to local indices aligned with Lw-CP matrices
+    # Map true labels to local indices aligned with L-CP matrices
     # Leaf level - convert to int for dictionary lookup consistency
-    y_leaf_local = np.array([leaf_g2l_LoUPCP[int(g)] for g in y_test_leaf_global_subset], dtype="int64")
+    y_leaf_local = np.array([leaf_g2l_PCP[int(g)] for g in y_test_leaf_global_subset], dtype="int64")
     
     # Major level: filter to samples where major is in vocab
     maj_in_vocab_mask = np.array([g is not None and not pd.isna(g) and int(g) in maj_g2l 
@@ -646,19 +646,19 @@ def run_loupcp(
     keep_family_bool_filtered = keep_family_bool[fam_in_vocab_mask]
     
     logger.info(
-        f"LoUP-CP per-level test filtering: "
+        f"P-CP per-level test filtering: "
         f"major: {maj_in_vocab_mask.sum()}/{len(maj_in_vocab_mask)} in vocab, "
         f"family: {fam_in_vocab_mask.sum()}/{len(fam_in_vocab_mask)} in vocab"
     )
     
-    # Evaluate LoUP-CP
-    logger.info("LoUP-CP: Reusing calibration from Lw-CP (no separate calibration time)")
-    test_start_time_LoUPCP = time.time()
-    metrics_LoUPCP_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
-    metrics_LoUPCP_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
-    metrics_LoUPCP_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
-    test_time_LoUPCP = time.time() - test_start_time_LoUPCP
-    logger.info(f"LoUP-CP testing: num_test_samples={len(y_leaf_local)}, time={test_time_LoUPCP:.4f}s")
+    # Evaluate P-CP
+    logger.info("P-CP: Reusing calibration from L-CP (no separate calibration time)")
+    test_start_time_PCP = time.time()
+    metrics_PCP_leaf = evaluate_sets_from_masks(keep_leaf_bool, y_leaf_local)
+    metrics_PCP_major = evaluate_sets_from_masks(keep_major_bool_filtered, y_major_local)
+    metrics_PCP_family = evaluate_sets_from_masks(keep_family_bool_filtered, y_family_local)
+    test_time_PCP = time.time() - test_start_time_PCP
+    logger.info(f"P-CP testing: num_test_samples={len(y_leaf_local)}, time={test_time_PCP:.4f}s")
     
     # Compute top1_acc_non_empty and base_top1_acc at leaf level
     # Initialize variables for use in major/family calculations
@@ -670,7 +670,7 @@ def run_loupcp(
     if keep_leaf_bool.shape[0] > 0:
         # Base top1: argmax from all probs (unmasked)
         base_top1_leaf = probs_test_leaf_subset.argmax(axis=1)
-        metrics_LoUPCP_leaf["base_top1_acc"] = float(np.mean(base_top1_leaf == y_leaf_local))
+        metrics_PCP_leaf["base_top1_acc"] = float(np.mean(base_top1_leaf == y_leaf_local))
         
         # Map to global indices for use in major/family calculations
         base_top1_leaf_global = np.array([leaf_vocab_global[base_top1_leaf[i]] for i in range(len(base_top1_leaf))])
@@ -680,15 +680,15 @@ def run_loupcp(
         top1_leaf = masked_probs_leaf.argmax(axis=1)
         non_empty_leaf = keep_leaf_bool.sum(axis=1) > 0
         if np.any(non_empty_leaf):
-            metrics_LoUPCP_leaf["top1_acc_non_empty"] = float(np.mean((top1_leaf[non_empty_leaf] == y_leaf_local[non_empty_leaf])))
+            metrics_PCP_leaf["top1_acc_non_empty"] = float(np.mean((top1_leaf[non_empty_leaf] == y_leaf_local[non_empty_leaf])))
         else:
-            metrics_LoUPCP_leaf["top1_acc_non_empty"] = float("nan")
+            metrics_PCP_leaf["top1_acc_non_empty"] = float("nan")
         
         # Map to global indices for use in major/family calculations
         top1_leaf_global = np.array([leaf_vocab_global[top1_leaf[i]] for i in range(len(top1_leaf))])
     else:
-        metrics_LoUPCP_leaf["top1_acc_non_empty"] = float("nan")
-        metrics_LoUPCP_leaf["base_top1_acc"] = float("nan")
+        metrics_PCP_leaf["top1_acc_non_empty"] = float("nan")
+        metrics_PCP_leaf["base_top1_acc"] = float("nan")
     
     # Compute top1_acc_non_empty and base_top1_acc for major level
     # Use leaf argmax predictions mapped up to major via hierarchy
@@ -705,9 +705,9 @@ def run_loupcp(
             base_top1_major_local = np.array([maj_g2l[int(g)] for g in base_top1_major_global[maj_valid_mask]], dtype="int64")
             # Align mask to compressed y_major_local (which is filtered by maj_in_vocab_mask)
             y_major_local_valid = y_major_local[maj_valid_mask[maj_in_vocab_mask]]
-            metrics_LoUPCP_major["base_top1_acc"] = float(np.mean(base_top1_major_local == y_major_local_valid))
+            metrics_PCP_major["base_top1_acc"] = float(np.mean(base_top1_major_local == y_major_local_valid))
         else:
-            metrics_LoUPCP_major["base_top1_acc"] = float("nan")
+            metrics_PCP_major["base_top1_acc"] = float("nan")
         
         # Top1 within set: use leaf top1 (within set) mapped to major
         if top1_leaf_global is not None:
@@ -723,14 +723,14 @@ def run_loupcp(
                 top1_major_local = np.array([maj_g2l[int(g)] for g in top1_major_global[maj_in_set_mask]], dtype="int64")
                 # Align mask to compressed y_major_local (filtered by maj_in_vocab_mask)
                 y_major_local_in_set = y_major_local[maj_in_set_mask[maj_in_vocab_mask]]
-                metrics_LoUPCP_major["top1_acc_non_empty"] = float(np.mean(top1_major_local == y_major_local_in_set))
+                metrics_PCP_major["top1_acc_non_empty"] = float(np.mean(top1_major_local == y_major_local_in_set))
             else:
-                metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
+                metrics_PCP_major["top1_acc_non_empty"] = float("nan")
         else:
-            metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
+            metrics_PCP_major["top1_acc_non_empty"] = float("nan")
     else:
-        metrics_LoUPCP_major["top1_acc_non_empty"] = float("nan")
-        metrics_LoUPCP_major["base_top1_acc"] = float("nan")
+        metrics_PCP_major["top1_acc_non_empty"] = float("nan")
+        metrics_PCP_major["base_top1_acc"] = float("nan")
     
     # Compute top1_acc_non_empty and base_top1_acc for family level
     # Use leaf argmax predictions mapped up to family via hierarchy
@@ -747,9 +747,9 @@ def run_loupcp(
             base_top1_family_local = np.array([fam_g2l[int(g)] for g in base_top1_family_global[fam_valid_mask]], dtype="int64")
             # Align mask to compressed y_family_local (which is filtered by fam_in_vocab_mask)
             y_family_local_valid = y_family_local[fam_valid_mask[fam_in_vocab_mask]]
-            metrics_LoUPCP_family["base_top1_acc"] = float(np.mean(base_top1_family_local == y_family_local_valid))
+            metrics_PCP_family["base_top1_acc"] = float(np.mean(base_top1_family_local == y_family_local_valid))
         else:
-            metrics_LoUPCP_family["base_top1_acc"] = float("nan")
+            metrics_PCP_family["base_top1_acc"] = float("nan")
         
         # Top1 within set: use leaf top1 (within set) mapped to family
         if top1_leaf_global is not None:
@@ -765,16 +765,16 @@ def run_loupcp(
                 top1_family_local = np.array([fam_g2l[int(g)] for g in top1_family_global[fam_in_set_mask]], dtype="int64")
                 # Align mask to compressed y_family_local (filtered by fam_in_vocab_mask)
                 y_family_local_in_set = y_family_local[fam_in_set_mask[fam_in_vocab_mask]]
-                metrics_LoUPCP_family["top1_acc_non_empty"] = float(np.mean(top1_family_local == y_family_local_in_set))
+                metrics_PCP_family["top1_acc_non_empty"] = float(np.mean(top1_family_local == y_family_local_in_set))
             else:
-                metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
+                metrics_PCP_family["top1_acc_non_empty"] = float("nan")
         else:
-            metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
+            metrics_PCP_family["top1_acc_non_empty"] = float("nan")
     else:
-        metrics_LoUPCP_family["top1_acc_non_empty"] = float("nan")
-        metrics_LoUPCP_family["base_top1_acc"] = float("nan")
+        metrics_PCP_family["top1_acc_non_empty"] = float("nan")
+        metrics_PCP_family["base_top1_acc"] = float("nan")
 
-    # Compute HIR for LoUP-CP using projected sets
+    # Compute HIR for P-CP using projected sets
     hir_family_sets: Dict[int, set] = {}
     hir_major_sets: Dict[int, set] = {}
     hir_leaf_sets: Dict[int, set] = {}
@@ -789,14 +789,14 @@ def run_loupcp(
             int(family_vocab_global[j]) for j in np.where(keep_family_bool[i])[0]
         )
 
-    hir_rate_LoUPCP = compute_hir_rate(
+    hir_rate_PCP = compute_hir_rate(
         hir_family_sets,
         hir_major_sets,
         hir_leaf_sets,
         leaf_to_major_global,
         major_to_family_global,
     )
-    metrics_LoUPCP_family["hir"] = hir_rate_LoUPCP
+    metrics_PCP_family["hir"] = hir_rate_PCP
     
     # Prepare labels for artifacts (same order as A)
     idx2id_map_leaf = {v: k for k, v in maps["leaf_id2idx"].items()}
@@ -808,50 +808,50 @@ def run_loupcp(
     idx2id_map_family = {v: k for k, v in maps["family_id2idx"].items()}
     class_labels_family = [str(idx2id_map_family.get(int(gidx), str(int(gidx)))) for gidx in family_vocab_global]
     
-    # Save LoUP-CP artifacts
+    # Save P-CP artifacts
     # Leaf summary
-    summary_LoUPCP_leaf = {
+    summary_PCP_leaf = {
         "level": "leaf",
-        "alpha_LoUPCP": alpha_single,  # Note: reused Lw-CP leaf alpha
+        "alpha_PCP": alpha_single,  # Note: reused L-CP leaf alpha
         "m_cal": m_leaf,
-        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
-        "metrics": metrics_LoUPCP_leaf,
+        "q_hat_leaf_PCP": q_hat_PCP,
+        "metrics": metrics_PCP_leaf,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_leaf_local.shape[0]),
         "class_labels": class_labels_leaf,
     }
-    save_loupcp_cp_artifacts(out_dir_LoUPCP, "leaf", summary_LoUPCP_leaf, alpha_single, run_idx)
-    logger.info(f"Saved LoUP-CP CP summary for leaf -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_leaf_summary.json")
+    save_pcp_cp_artifacts(out_dir_PCP, "leaf", summary_PCP_leaf, alpha_single, run_idx)
+    logger.info(f"Saved P-CP summary for leaf -> {out_dir_PCP}/PCP_alpha_{alpha_single}_run_{run_idx}_cp_leaf_summary.json")
     
     # Major summary
-    summary_LoUPCP_major = {
+    summary_PCP_major = {
         "level": "major",
-        "alpha_LoUPCP": alpha_single,
+        "alpha_PCP": alpha_single,
         "m_cal": m_leaf,
-        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
-        "metrics": metrics_LoUPCP_major,
+        "q_hat_leaf_PCP": q_hat_PCP,
+        "metrics": metrics_PCP_major,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_major_local.shape[0]),
         "class_labels": class_labels_major,
     }
-    save_loupcp_cp_artifacts(out_dir_LoUPCP, "major", summary_LoUPCP_major, alpha_single, run_idx)
-    logger.info(f"Saved LoUP-CP CP summary for major -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_major_summary.json")
+    save_pcp_cp_artifacts(out_dir_PCP, "major", summary_PCP_major, alpha_single, run_idx)
+    logger.info(f"Saved P-CP summary for major -> {out_dir_PCP}/PCP_alpha_{alpha_single}_run_{run_idx}_cp_major_summary.json")
     
     # Family summary
-    summary_LoUPCP_family = {
+    summary_PCP_family = {
         "level": "family",
-        "alpha_LoUPCP": alpha_single,
+        "alpha_PCP": alpha_single,
         "m_cal": m_leaf,
-        "q_hat_leaf_LoUPCP": q_hat_LoUPCP,
-        "metrics": metrics_LoUPCP_family,
+        "q_hat_leaf_PCP": q_hat_PCP,
+        "metrics": metrics_PCP_family,
         "num_test_defined": int(len(idx_test_leaf_defined)),
         "num_test_used": int(y_family_local.shape[0]),
         "class_labels": class_labels_family,
     }
-    save_loupcp_cp_artifacts(out_dir_LoUPCP, "family", summary_LoUPCP_family, alpha_single, run_idx)
-    logger.info(f"Saved LoUP-CP CP summary for family -> {out_dir_LoUPCP}/LoUPCP_alpha_{alpha_single}_run_{run_idx}_cp_family_summary.json")
+    save_pcp_cp_artifacts(out_dir_PCP, "family", summary_PCP_family, alpha_single, run_idx)
+    logger.info(f"Saved P-CP summary for family -> {out_dir_PCP}/PCP_alpha_{alpha_single}_run_{run_idx}_cp_family_summary.json")
     
-    # Build per-sample details for LoUP-CP
+    # Build per-sample details for P-CP
     # Leaf predictions (argmax from masked probs)
     if keep_leaf_bool.shape[0] > 0:
         masked_probs_leaf = np.where(keep_leaf_bool, probs_test_leaf_subset, -np.inf)
@@ -884,16 +884,16 @@ def run_loupcp(
             kept_labels = [str(idx2id_map.get(int(g), str(int(g)))) for g in kept_global]
             return "|".join(kept_labels)
         
-        # Build per-level details for LoUP-CP
+        # Build per-level details for P-CP
         levels = ["family", "major", "leaf"]
-        per_level_details_LoUPCP = {"family": {}, "major": {}, "leaf": {}}
+        per_level_details_PCP = {"family": {}, "major": {}, "leaf": {}}
         for i, global_row_idx in enumerate(idx_test_leaf_subset):
             # Leaf level
-            # Use Lw-CP's leaf model prediction for pred_leaf
-            leaf_pred_label = base_pred_labels_from_LwCP.get("leaf", {}).get(int(global_row_idx), "")
+            # Use L-CP's leaf model prediction for pred_leaf
+            leaf_pred_label = base_pred_labels_from_LCP.get("leaf", {}).get(int(global_row_idx), "")
             leaf_true_label = str(idx2id_map_leaf.get(int(y_test_leaf_global_full[i]), str(int(y_test_leaf_global_full[i])))) if pd.notna(y_test_leaf_global_full[i]) else ""
             leaf_set = mask_to_label_set(keep_leaf_bool[i], leaf_vocab_global, idx2id_map_leaf)
-            per_level_details_LoUPCP["leaf"][int(global_row_idx)] = {
+            per_level_details_PCP["leaf"][int(global_row_idx)] = {
                 "true_leaf": leaf_true_label,
                 "pred_leaf": leaf_pred_label,
                 "set_leaf": leaf_set,
@@ -901,12 +901,12 @@ def run_loupcp(
             
             # Major level (use full upward closure for all test samples)
             if pd.notna(y_test_major_global_full[i]):
-                # Use Lw-CP's major model prediction for pred_major
-                major_pred_label = base_pred_labels_from_LwCP.get("major", {}).get(int(global_row_idx), "")
+                # Use L-CP's major model prediction for pred_major
+                major_pred_label = base_pred_labels_from_LCP.get("major", {}).get(int(global_row_idx), "")
                 major_true_label = str(idx2id_map_major.get(int(y_test_major_global_full[i]), str(int(y_test_major_global_full[i]))))
                 # Use full keep_major_bool (not filtered) for all test samples
                 major_set = mask_to_label_set(keep_major_bool[i], major_vocab_global, idx2id_map_major)
-                per_level_details_LoUPCP["major"][int(global_row_idx)] = {
+                per_level_details_PCP["major"][int(global_row_idx)] = {
                     "true_major": major_true_label,
                     "pred_major": major_pred_label,
                     "set_major": major_set,
@@ -914,69 +914,69 @@ def run_loupcp(
             
             # Family level (use full upward closure for all test samples)
             if pd.notna(y_test_family_global_full[i]):
-                # Use Lw-CP's family model prediction for pred_family
-                family_pred_label = base_pred_labels_from_LwCP.get("family", {}).get(int(global_row_idx), "")
+                # Use L-CP's family model prediction for pred_family
+                family_pred_label = base_pred_labels_from_LCP.get("family", {}).get(int(global_row_idx), "")
                 family_true_label = str(idx2id_map_family.get(int(y_test_family_global_full[i]), str(int(y_test_family_global_full[i]))))
                 # Use full keep_family_bool (not filtered) for all test samples
                 family_set = mask_to_label_set(keep_family_bool[i], family_vocab_global, idx2id_map_family)
-                per_level_details_LoUPCP["family"][int(global_row_idx)] = {
+                per_level_details_PCP["family"][int(global_row_idx)] = {
                     "true_family": family_true_label,
                     "pred_family": family_pred_label,
                     "set_family": family_set,
                 }
         
-        # Merge per-level details into a single DataFrame and save for LoUP-CP
+        # Merge per-level details into a single DataFrame and save for P-CP
         # Use only test set indices that have at least one level prediction
-        test_indices_with_predictions_LoUPCP = set()
+        test_indices_with_predictions_PCP = set()
         for lvl in levels:
-            test_indices_with_predictions_LoUPCP.update(per_level_details_LoUPCP[lvl].keys())
-        test_indices_sorted_LoUPCP = sorted([int(i) for i in test_indices_with_predictions_LoUPCP])
-        rows_LoUPCP = []
-        for idx in test_indices_sorted_LoUPCP:
+            test_indices_with_predictions_PCP.update(per_level_details_PCP[lvl].keys())
+        test_indices_sorted_PCP = sorted([int(i) for i in test_indices_with_predictions_PCP])
+        rows_PCP = []
+        for idx in test_indices_sorted_PCP:
             # Only include rows that are in the test set
             if idx not in idx_test_leaf_defined:
                 continue
             row = {"index": idx}
             for lvl in levels:
-                det = per_level_details_LoUPCP[lvl].get(idx, {})
+                det = per_level_details_PCP[lvl].get(idx, {})
                 row.update({
                     f"true_{lvl}": det.get(f"true_{lvl}", ""),
                     f"pred_{lvl}": det.get(f"pred_{lvl}", ""),
                     f"set_{lvl}": det.get(f"set_{lvl}", ""),
                 })
-            rows_LoUPCP.append(row)
-        if rows_LoUPCP:
-            details_df_LoUPCP = pd.DataFrame(rows_LoUPCP).set_index("index").sort_index()
-            details_csv_LoUPCP = os.path.join(out_dir_LoUPCP, f"LoUPCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
-            details_df_LoUPCP.to_csv(details_csv_LoUPCP)
-            logger.info(f"Saved per-sample run details for LoUP-CP (test set only) -> {details_csv_LoUPCP}")
+            rows_PCP.append(row)
+        if rows_PCP:
+            details_df_PCP = pd.DataFrame(rows_PCP).set_index("index").sort_index()
+            details_csv_PCP = os.path.join(out_dir_PCP, f"PCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
+            details_df_PCP.to_csv(details_csv_PCP)
+            logger.info(f"Saved per-sample run details for P-CP (test set only) -> {details_csv_PCP}")
     
-    logger.info("LoUP-CP one-shot CP experiment completed")
+    logger.info("P-CP one-shot CP experiment completed")
 
 
-def run_lwcp_one_shot(
+def run_lcp_one_shot(
     logger: logging.Logger,
     df: pd.DataFrame,
     maps: Dict,
     input_params: Dict,
     out_dir: str,
     bundle_per_level: Dict[str, Dict],
-    out_dir_LoUPCP: Optional[str] = None,
+    out_dir_PCP: Optional[str] = None,
 ):
     seed = int(input_params.get("seed", 42))
 
     # Read method configuration
-    methods = input_params.get("methods", ["LwCP"])
+    methods = input_params.get("methods", ["LCP"])
     if isinstance(methods, str):
         methods = [methods]
-    compute_LoUPCP = "LoUPCP" in methods
-    if compute_LoUPCP:
-        logger.info("LoUP-CP enabled: will compute leaf-only CP with upward projection")
+    compute_PCP = "PCP" in methods
+    if compute_PCP:
+        logger.info("P-CP enabled: will compute projection-based CP (leaf-only CP with upward projection)")
 
     # Ensure ancestor consistency before any split
     df = ensure_ancestor_consistency(df, maps, logger)
 
-    # Build hierarchy mappings for HIR and LoUP-CP
+    # Build hierarchy mappings for HIR and P-CP
     leaf_to_major_global, major_to_family_global, leaf_to_family_global = build_hierarchy_mappings(df, logger)
 
     # Build masks for defined labels (handle token-based undefined where available)
@@ -1046,7 +1046,7 @@ def run_lwcp_one_shot(
     per_level_details: Dict[str, Dict[int, Dict[str, str]]] = {lvl: {} for lvl in levels}
     per_level_sets_global: Dict[str, Dict[int, set]] = {lvl: {} for lvl in levels}
     
-    # For LoUP-CP: collect vocabs and leaf model artifacts
+    # For P-CP: collect vocabs and leaf model artifacts
     family_vocab_global = None
     major_vocab_global = None
     leaf_vocab_global = None
@@ -1143,8 +1143,8 @@ def run_lwcp_one_shot(
             f"Calibration: level={level}, m_k={m_k}, j={j_k}, step={step_k:.6f}, q_hat={q_hat:.6f}, time={cal_time:.4f}s"
         )
 
-        # LoUP-CP capture (leaf only)
-        if compute_LoUPCP and level == "leaf":
+        # P-CP capture (leaf only)
+        if compute_PCP and level == "leaf":
             q_hat_leaf = q_hat
             m_leaf = m_k
             probs_test_leaf = probs_test
@@ -1156,9 +1156,9 @@ def run_lwcp_one_shot(
             y_test_leaf_global_aligned = y_test_global[test_seen_mask]
             y_cal_leaf_global_aligned = y_cal_global[cal_seen_mask]
             leaf_vocab_global = classes_global
-        elif compute_LoUPCP and level == "major":
+        elif compute_PCP and level == "major":
             major_vocab_global = classes_global
-        elif compute_LoUPCP and level == "family":
+        elif compute_PCP and level == "family":
             family_vocab_global = classes_global
 
         # Warn on tiny calibration set
@@ -1266,7 +1266,7 @@ def run_lwcp_one_shot(
                     break
         except Exception:
             pass
-        details_csv = os.path.join(out_dir, f"LwCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
+        details_csv = os.path.join(out_dir, f"LCP_alpha_{alpha_single}_run_{run_idx}_test_samples.csv")
         details_df.to_csv(details_csv)
         logger.info(f"Saved per-sample run details (test set only) -> {details_csv}")
 
@@ -1295,16 +1295,16 @@ def run_lwcp_one_shot(
     else:
         logger.warning("HIR could not be computed (insufficient overlapping samples)")
 
-    logger.info("Lw-CP one-shot CP experiment completed")
+    logger.info("L-CP one-shot CP experiment completed")
     
-    # Build mapping of Lw-CP base predictions per level for reuse in LoUP-CP run_details
-    base_pred_labels_from_LwCP: Dict[str, Dict[int, str]] = {
+    # Build mapping of L-CP base predictions per level for reuse in P-CP run_details
+    base_pred_labels_from_LCP: Dict[str, Dict[int, str]] = {
         lvl: {idx: det.get(f"pred_{lvl}", "") for idx, det in per_level_details[lvl].items()} for lvl in levels
     }
     
-    # LoUP-CP: Leaf-only CP with upward closure
-    if compute_LoUPCP:
-        run_loupcp(
+    # P-CP: projection-based CP (leaf-only CP with upward projection)
+    if compute_PCP:
+        run_pcp(
             df=df,
             maps=maps,
             input_params=input_params,
@@ -1319,9 +1319,9 @@ def run_lwcp_one_shot(
             idx_test_leaf_seen=idx_test_leaf_seen,
             y_test_leaf_global_aligned=y_test_leaf_global_aligned,
             alpha_single=alpha_single,
-            base_pred_labels_from_LwCP=base_pred_labels_from_LwCP,
+            base_pred_labels_from_LCP=base_pred_labels_from_LCP,
             logger=logger,
-            out_dir_LoUPCP=out_dir_LoUPCP,
+            out_dir_PCP=out_dir_PCP,
         )
 
 

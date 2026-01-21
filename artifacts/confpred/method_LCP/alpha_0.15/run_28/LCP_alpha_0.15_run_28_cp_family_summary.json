@@ -1,0 +1,27 @@
+{
+  "level": "family",
+  "alpha": 0.15,
+  "m_k": 6338,
+  "j": 5389,
+  "quantile_step": 0.00015775358889414735,
+  "q_hat": 0.08076465129852295,
+  "metrics": {
+    "coverage": 0.845377090564847,
+    "set_size_mean": 0.8526349005995583,
+    "set_size_median": 1.0,
+    "empty_rate": 0.1473650994004418,
+    "singleton_rate": 0.8526349005995583,
+    "top1_acc_non_empty": 0.9914877868245744,
+    "base_top1_acc": 0.9556642473966551,
+    "hir": 0.9998418722327641
+  },
+  "num_test_defined": 6338,
+  "num_test_used": 6338,
+  "class_labels": [
+    "fam:Android",
+    "fam:Linux",
+    "fam:Windows",
+    "fam:iOS",
+    "fam:macOS"
+  ]
+}

@@ -37,8 +37,8 @@ seed: 2026
 
 # Methods to evaluate
 methods:
-  - LwCP      # Level-wise Conformal Prediction
-  - LoUPCP    # Leaf-only with Upward Projection Conformal Prediction
+  - LCP       # level-wise CP
+  - PCP       # projection-based CP
 
 # =============================================================================
 # Experiment Configuration

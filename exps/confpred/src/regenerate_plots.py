@@ -34,10 +34,10 @@ def discover_methods_and_alphas(out_dir: str) -> Tuple[List[str], Dict[str, List
     methods = []
     method_alphas = {}
     
-    # Look for method_LwCP, method_LoUPCP directories
+    # Look for method_LCP, method_PCP directories
     for method_dir in glob.glob(os.path.join(out_dir, "method_*")):
         method_name = os.path.basename(method_dir).replace("method_", "")
-        if method_name in ["LwCP", "LoUPCP"]:
+        if method_name in ["LCP", "PCP"]:
             methods.append(method_name)
             
             # Discover alphas in this method directory

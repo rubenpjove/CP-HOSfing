@@ -1,5 +1,5 @@
 title: "CP-HOSfing - Conformal Prediction"
-description: "Code for conformal prediction approaches: Lw-CP (per-level), LoUP-CP (leaf-level only)"
+description: "Code for conformal prediction approaches: L-CP (level-wise), P-CP (projection-based)"
 
 # Debugging
 slurm:
