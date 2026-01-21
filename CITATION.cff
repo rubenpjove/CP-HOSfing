@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "CP-HOSfing: Conformal Prediction in Hierarchical Operating System Fingerprinting"
+title: "Reliable Hierarchical Operating System Fingerprinting via Conformal Prediction"
 authors:
   - family-names: Pérez Jove
     given-names: Rubén
@@ -19,7 +19,15 @@ date-released: 2026-01-13
 url: "https://github.com/rubenpjove/CP-HOSfing"
 license: GPL-3.0
 repository-code: "https://github.com/rubenpjove/CP-HOSfing"
-# keywords:
-#   - #todo: add keywords
-# abstract: >-
-#   #todo: add abstract
+keywords:
+  - Operating System 
+  - Fingerprinting
+  - Conformal Prediction
+  - Hierarchical Classification
+  - Uncertainty Quantification
+  - Network Security
+  - Cybersecurity
+  - Deep Learning
+  - Machine Learning
+abstract: >-
+  Operating System (OS) fingerprinting is critical for network security, but conventional methods do not provide formal uncertainty quantification mechanisms. Conformal Prediction (CP) could be directly wrapped around existing methods to obtain prediction sets with guaranteed coverage. However, a direct application of CP would treat OS identification as a flat classification problem, ignoring the natural taxonomic structure of OSs and providing brittle point predictions. This work addresses these limitations by introducing and evaluating two distinct structured CP strategies: level-wise CP (L-CP), which calibrates each hierarchy level independently, and projection-based CP (P-CP), which ensures structural consistency by projecting leaf-level sets upwards. Our results demonstrate that, while both methods satisfy validity guarantees, they expose a fundamental trade-off between local precision and global consistency. L-CP yields tighter prediction sets suitable for human forensic analysis but suffers from taxonomic inconsistencies. Conversely, P-CP guarantees hierarchically consistent, nested sets ideal for automated policy enforcement, albeit at the cost of reduced efficiency at coarser levels.

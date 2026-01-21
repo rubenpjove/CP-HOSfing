@@ -1,4 +1,4 @@
-# Conformal Prediction in Hierarchical Operating System Fingerprinting
+# Reliable Hierarchical Operating System Fingerprinting via Conformal Prediction
 
 [![Python 3.10](https://img.shields.io/badge/Python-3.10-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.8](https://img.shields.io/badge/PyTorch-2.8-EE4C2C.svg)](https://pytorch.org/)
