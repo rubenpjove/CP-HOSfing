@@ -109,7 +109,7 @@ This project uses the **Passive Operating System Fingerprinting Revisited** data
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
 
-The dataset is not included in this repository due to file size restrictions.
+A copy of the original dataset is included in `data/`.
 
 ## Installation
 
@@ -128,7 +128,7 @@ cd CP-HOSfing
 # Build the Docker image
 docker compose build
 
-# Download and prepare the dataset
+# Download and prepare the dataset (already included in `data/`)
 wget https://zenodo.org/records/7635138/files/anonymized_flows.zip
 unzip anonymized_flows.zip -d ./data/
 mv flows_ground_truth_merged_anonymized.csv dataset.csv
@@ -279,4 +279,4 @@ This project is licensed under the GNU General Public License v3.0. See [LICENSE
 
 ## Acknowledgments
 
-This work was supported by the grant ED431C 2022/46 - Competitive Reference Groups GRC - funded by *Xunta de Galicia* (Spain). This work was also supported by CITIC, as a center accredited for excellence within the Galician University System and a member of the CIGUS Network, which receives subsidies from the Department of Education, Science, Universities, and Vocational Training of the *Xunta de Galicia*. Additionally, CITIC is co-financed by the EU through the FEDER Galicia 2021–27 operational program (Ref. ED431G 2023/01). This work was also supported by the *"Formación de Profesorado Universitario"* (FPU) grant from the Spanish Ministry of Universities to Rubén Pérez Jove (Grant FPU22/04418). This work was supported by the inMOTION programme, INDITEX-UDC Predoctoral Research Stay Grants (2025 call), under the collaboration agreement between Universidade da Coruña (UDC) and INDITEX, S.A. Funding for open access charge: Universidade da Coruña/CISUG.
+This work was supported by the grant ED431C 2022/46 - Competitive Reference Groups GRC - funded by *Xunta de Galicia* (Spain). This work was also supported by CITIC, as a center accredited for excellence within the Galician University System and a member of the CIGUS Network, which receives subsidies from the Department of Education, Science, Universities, and Vocational Training of the *Xunta de Galicia*. Additionally, CITIC is co-financed by the EU through the FEDER Galicia 2021–27 operational program (Ref. ED431G 2023/01). This work was also supported by the *"Formación de Profesorado Universitario"* (FPU) grant from the Spanish Ministry of Universities to Rubén Pérez Jove (Grant FPU22/04418). This work was supported by the inMOTION programme, INDITEX-UDC Predoctoral Research Stay Grants (2025 call), under the collaboration agreement between Universidade da Coruña (UDC) and INDITEX, S.A. Funding for open access charge: Universidade da Coruña/CISUG. The work of O. Simeone was supported by the European Research Council (ERC) under the European Union’s Horizon Europe Programme (grant agreement No. 101198347), by an Open Fellowship of the EPSRC (EP/W024101/1), and by the EPSRC project (EP/X011852/1).
