@@ -1,19 +1,19 @@
 {
   "level": "major",
   "alpha_PCP": 0.3,
-  "m_cal": 6324,
-  "q_hat_leaf_PCP": 0.9997263550758362,
+  "m_cal": 6338,
+  "q_hat_leaf_PCP": 0.6786491870880127,
   "metrics": {
-    "coverage": 0.8646426312460468,
-    "set_size_mean": 7.074952561669829,
-    "set_size_median": 7.0,
-    "empty_rate": 0.0,
-    "singleton_rate": 0.031625553447185324,
-    "base_top1_acc": 0.31024667931688804,
-    "top1_acc_non_empty": 0.31024667931688804
+    "coverage": 0.7224676554118018,
+    "set_size_mean": 0.8772483433259703,
+    "set_size_median": 1.0,
+    "empty_rate": 0.18475859892710633,
+    "singleton_rate": 0.753234458819817,
+    "base_top1_acc": 0.7874723887661723,
+    "top1_acc_non_empty": 0.8507838203986839
   },
   "num_test_defined": 6338,
-  "num_test_used": 6324,
+  "num_test_used": 6338,
   "class_labels": [
     "maj:Android_10",
     "maj:Android_4",
@@ -35,7 +35,6 @@
     "maj:iOS_13",
     "maj:iOS_14",
     "maj:macOS_10",
-    "maj:macOS_OTHER",
-    "21"
+    "maj:macOS_OTHER"
   ]
 }

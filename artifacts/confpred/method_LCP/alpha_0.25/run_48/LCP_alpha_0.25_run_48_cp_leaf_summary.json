@@ -1,21 +1,21 @@
 {
   "level": "leaf",
   "alpha": 0.25,
-  "m_k": 6323,
-  "j": 4743,
-  "quantile_step": 0.00015812776723592663,
-  "q_hat": 0.9998651742935181,
+  "m_k": 6338,
+  "j": 4755,
+  "quantile_step": 0.00015775358889414735,
+  "q_hat": 0.7515509724617004,
   "metrics": {
-    "coverage": 0.7641106719367589,
-    "set_size_mean": 13.763636363636364,
-    "set_size_median": 13.0,
-    "empty_rate": 0.0,
-    "singleton_rate": 0.010276679841897233,
-    "top1_acc_non_empty": 0.09249011857707509,
-    "base_top1_acc": 0.09249011857707509
+    "coverage": 0.7429788576838119,
+    "set_size_mean": 1.0306090249289996,
+    "set_size_median": 1.0,
+    "empty_rate": 0.10176711896497317,
+    "singleton_rate": 0.7690123067213632,
+    "top1_acc_non_empty": 0.7728789741788161,
+    "base_top1_acc": 0.7202587567055854
   },
   "num_test_defined": 6338,
-  "num_test_used": 6325,
+  "num_test_used": 6338,
   "class_labels": [
     "leaf:Android_10",
     "leaf:Android_4_0.0",
@@ -68,6 +68,8 @@
     "leaf:macOS_10_15.0",
     "leaf:macOS_10_6.0",
     "leaf:macOS_10_7.0",
-    "leaf:macOS_10_8.0"
+    "leaf:macOS_10_8.0",
+    "leaf:macOS_10_9.0",
+    "leaf:macOS_OTHER"
   ]
 }

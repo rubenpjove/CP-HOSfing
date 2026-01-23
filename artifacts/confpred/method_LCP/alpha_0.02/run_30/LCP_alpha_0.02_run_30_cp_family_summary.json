@@ -4,16 +4,16 @@
   "m_k": 6338,
   "j": 6213,
   "quantile_step": 0.00015775358889414735,
-  "q_hat": 0.9103361368179321,
+  "q_hat": 0.9307697415351868,
   "metrics": {
-    "coverage": 0.9842221520984538,
-    "set_size_mean": 1.1080782581255917,
+    "coverage": 0.9867466077627012,
+    "set_size_mean": 1.1667718523193435,
     "set_size_median": 1.0,
     "empty_rate": 0.0,
-    "singleton_rate": 0.903755127800568,
-    "top1_acc_non_empty": 0.958030924581887,
-    "base_top1_acc": 0.958030924581887,
-    "hir": 1.0
+    "singleton_rate": 0.8461659829599243,
+    "top1_acc_non_empty": 0.9550331334805933,
+    "base_top1_acc": 0.9550331334805933,
+    "hir": 0.5579047017986747
   },
   "num_test_defined": 6338,
   "num_test_used": 6338,

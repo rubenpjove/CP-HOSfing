@@ -7,12 +7,12 @@
   "q_hat": 1.0,
   "metrics": {
     "coverage": 1.0,
-    "set_size_mean": 22.0,
-    "set_size_median": 22.0,
+    "set_size_mean": 21.0,
+    "set_size_median": 21.0,
     "empty_rate": 0.0,
     "singleton_rate": 0.0,
-    "top1_acc_non_empty": 0.11801830230356579,
-    "base_top1_acc": 0.11801830230356579
+    "top1_acc_non_empty": 0.8273903439570842,
+    "base_top1_acc": 0.8273903439570842
   },
   "num_test_defined": 6338,
   "num_test_used": 6338,
@@ -37,7 +37,6 @@
     "maj:iOS_13",
     "maj:iOS_14",
     "maj:macOS_10",
-    "maj:macOS_OTHER",
-    "21"
+    "maj:macOS_OTHER"
   ]
 }

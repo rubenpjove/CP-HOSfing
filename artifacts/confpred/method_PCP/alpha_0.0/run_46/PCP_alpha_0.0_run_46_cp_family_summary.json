@@ -1,20 +1,20 @@
 {
   "level": "family",
   "alpha_PCP": 0.0,
-  "m_cal": 6323,
-  "q_hat_leaf_PCP": 1.0,
+  "m_cal": 6338,
+  "q_hat_leaf_PCP": 0.9999999403953552,
   "metrics": {
-    "coverage": 1.0,
-    "set_size_mean": 5.0,
+    "coverage": 0.9996844430419691,
+    "set_size_mean": 4.997633322814768,
     "set_size_median": 5.0,
     "empty_rate": 0.0,
-    "singleton_rate": 0.0,
-    "base_top1_acc": 0.4325691699604743,
-    "top1_acc_non_empty": 0.4325691699604743,
+    "singleton_rate": 0.0001577784790154623,
+    "base_top1_acc": 0.9244241085515935,
+    "top1_acc_non_empty": 0.9244241085515935,
     "hir": 0.0
   },
   "num_test_defined": 6338,
-  "num_test_used": 6325,
+  "num_test_used": 6338,
   "class_labels": [
     "fam:Android",
     "fam:Linux",

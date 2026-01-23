@@ -1,19 +1,19 @@
 {
   "level": "leaf",
   "alpha_PCP": 0.4,
-  "m_cal": 6325,
-  "q_hat_leaf_PCP": 0.9994198083877563,
+  "m_cal": 6338,
+  "q_hat_leaf_PCP": 0.42892777919769287,
   "metrics": {
-    "coverage": 0.6014550055353471,
-    "set_size_mean": 8.393167800094892,
-    "set_size_median": 8.0,
-    "empty_rate": 0.0,
-    "singleton_rate": 0.03779851336390953,
-    "base_top1_acc": 0.08951447097896569,
-    "top1_acc_non_empty": 0.08951447097896569
+    "coverage": 0.5907226254338909,
+    "set_size_mean": 0.6519406752918901,
+    "set_size_median": 1.0,
+    "empty_rate": 0.3480593247081098,
+    "singleton_rate": 0.6519406752918901,
+    "base_top1_acc": 0.7167876301672452,
+    "top1_acc_non_empty": 0.9060987415295256
   },
   "num_test_defined": 6338,
-  "num_test_used": 6323,
+  "num_test_used": 6338,
   "class_labels": [
     "leaf:Android_10",
     "leaf:Android_4_0.0",
@@ -66,6 +66,8 @@
     "leaf:macOS_10_15.0",
     "leaf:macOS_10_6.0",
     "leaf:macOS_10_7.0",
-    "leaf:macOS_10_8.0"
+    "leaf:macOS_10_8.0",
+    "leaf:macOS_10_9.0",
+    "leaf:macOS_OTHER"
   ]
 }

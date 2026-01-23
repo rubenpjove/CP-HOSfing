@@ -6,7 +6,7 @@ dataset_indices_map_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOS
 maps_path: /mnt/netapp2/Store_uni/home/ulc/co/rpj/projects/CP-HOSfing/data/lastovicka2023/maps.plk
 
 # Seed
-seed: 42
+seed: 2026
 
 # Split proportions for Train/Cal/Test (must sum to 1.0)
 split_proportions:

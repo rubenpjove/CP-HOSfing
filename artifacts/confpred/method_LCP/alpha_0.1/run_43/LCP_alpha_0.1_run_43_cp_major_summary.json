@@ -4,15 +4,15 @@
   "m_k": 6338,
   "j": 5706,
   "quantile_step": 0.00015775358889414735,
-  "q_hat": 0.9999995827674866,
+  "q_hat": 0.7584162950515747,
   "metrics": {
-    "coverage": 0.9024928999684443,
-    "set_size_mean": 16.89192174187441,
-    "set_size_median": 17.0,
-    "empty_rate": 0.0,
-    "singleton_rate": 0.0,
-    "top1_acc_non_empty": 0.12117387188387505,
-    "base_top1_acc": 0.12117387188387505
+    "coverage": 0.8953928684127485,
+    "set_size_mean": 1.2155254023351214,
+    "set_size_median": 1.0,
+    "empty_rate": 0.0014200063111391606,
+    "singleton_rate": 0.8144525086778164,
+    "top1_acc_non_empty": 0.8306209511771212,
+    "base_top1_acc": 0.8294414641842852
   },
   "num_test_defined": 6338,
   "num_test_used": 6338,
@@ -37,7 +37,6 @@
     "maj:iOS_13",
     "maj:iOS_14",
     "maj:macOS_10",
-    "maj:macOS_OTHER",
-    "21"
+    "maj:macOS_OTHER"
   ]
 }
