@@ -109,7 +109,7 @@ This project uses the **Passive Operating System Fingerprinting Revisited** data
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.7635138.svg)](https://doi.org/10.5281/zenodo.7635138)
 
-A copy of the original dataset is included in `data/`.
+The dataset is not included in this repository due to file size restrictions.
 
 ## Installation
 
@@ -128,7 +128,7 @@ cd CP-HOSfing
 # Build the Docker image
 docker compose build
 
-# Download and prepare the dataset (already included in `data/`)
+# Download and prepare the dataset
 wget https://zenodo.org/records/7635138/files/anonymized_flows.zip
 unzip anonymized_flows.zip -d ./data/
 mv flows_ground_truth_merged_anonymized.csv dataset.csv

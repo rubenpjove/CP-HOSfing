@@ -167,8 +167,8 @@ exps/**/hpc_conf/
 # =============================================================================
 
 # Data directory (keep .gitkeep only)
-# data/*
-# !data/.gitkeep
+data/*
+!data/.gitkeep
 
 # Artifacts directory: keep the folder and .gitkeep, ignore everything else
 # artifacts/*
